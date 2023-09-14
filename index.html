@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>WebGPU Engine</title>
+</head>
+	<style>
+		body {
+			background: black;
+			border: none;
+			color:white;
+		}
+		#center_view {
+			display: 			flex;
+			flex-direction: 	column;
+			justify-content: 	center;
+			align-items:		center;
+			border:				none;
+			gap:				20px;
+		}
+	</style>
+	<body>
+    	<script src="main.js"  		type="module"></script> <!-- fundamental app logic -->
+    	<script src="algebra.js" 	type="module"></script> <!-- spatial mathematics   -->
+    	<script src="gfx.js" 		type="module"></script> <!-- graphics api helpers  -->
+    	<script src="shaders.js" 	type="module"></script> <!-- basic shader testing  -->
+    	<script src="mesh.js" 		type="module"></script> <!-- simple mesh loading   -->
+    	<script src="scene.js" 		type="module"></script> <!-- scene/sketch code 	   -->
+		<div id="center_view"></div>
+	</body>
+</html>
