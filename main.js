@@ -107,7 +107,7 @@ export const bootstrap_engine= async(self)=> {
 		return await props.createCanvas2DContext(canvas);
 	}
 
-	props.setFrameRate(60);
+	props.setFrameRate((30*2);
 // click operations
 	if(self.on_click) window.addEventListener("click", (event) => self.on_click(props, event));
 	if(self.on_click_down) window.addEventListener("mousedown", (event) => self.on_click_down(props, event));
