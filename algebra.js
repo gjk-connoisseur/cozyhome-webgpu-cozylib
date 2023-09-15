@@ -51,7 +51,7 @@ export const m3f = {
 	zero:()=>new Float32Array(9),
 	clear:(a)=> { for(let i=0;i<9;i++) a[i] = 0; },
 	copy:(a,b)=> { for(let i=0;i<9;i++) b[i] = a[i]; },
-	diag:(q,e=1)=> {
+	diag:(e=1, q=m3f.zero())=> {
 		const buf = m3f.zero();
 		for(let i=0,j=0;i<9;i+=3,j++) buf[i+j] = e;
 		return buf;
@@ -192,7 +192,7 @@ export const m4f = {
 	zero:()=>new Float32Array(16),
 	clear:(a)=> { for(let i=0;i<16;i++) a[i] = 0; },
 	copy:(a,b)=> { for(let i=0;i<16;i++) b[i] = a[i]; },
-	diag:(q,e=1)=> {
+	diag:(e=1, q=m4f.zero())=> {
 		const buf = m4f.zero();
 		for(let i=0,j=0;i<16;i+=4,j++) buf[i+j] = e;
 		return buf;
@@ -208,7 +208,7 @@ export const m4f = {
 		return c;
 	},
 // credit goes to ken perlin here for his nifty cofactor expansion bitshifts :) -DC @ 8/28/23
-	inverse:(a,b)=> {
+	inverse:(a,b=m4f.zero())=> {
 		let det = 0;
 		const cofactor = (c, r) => {
  			const s = (i, j) => a[c+i & 3 | (r+j & 3) << 2];
@@ -220,6 +220,26 @@ export const m4f = {
 		for (let i=0; i<4;   i++) det += a[i] * b[i << 2];
 		for (let i=0; i<16;  i++) b[i] /= det;
 		return b;
+	},
+	transpose:(a,b=m4f.zero())=> {
+		if(b != null) {
+			for(let i=0;i<4;i++) {
+				for(let j=0;j<4;j++) {
+					b[4*i+j] = a[4*j + i];
+				}
+			}
+			return b;
+		}else {
+// in-place transpose
+			for(let i=0;i<4;i++) {
+				for(let j=i+1;j<4;j++) {
+					const o = a[4*i + j];
+					a[4*i + j] = a[4*j + i];
+					a[4*j + i] = o;
+				}
+			}
+			return a;
+		}
 	},
 	rotx:(t, a = m4f.identity())=> {
 		const ct = Math.cos(t), st = Math.sin(t);
@@ -243,6 +263,10 @@ export const m4f = {
 		a[0]  = +ct; a[ 1] = +st;
 		a[4]  = -st; a[ 5] = +ct;
 		a[10] = 1; 	 a[15] = 1;
+		return a;
+	},
+	scale:(e=1,a=m4f.zero())=> {
+		a = m4f.diag(e, a); a[15] = 1;
 		return a;
 	},
 // 4x4 translation matrix

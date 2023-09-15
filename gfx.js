@@ -178,6 +178,20 @@ export const gfx = {
 		const far = 100;
 		return WGPU_ORTHOGRAPHIC_MATRIX(-s*aspect, +s*aspect, 0.1, 100);	
 	},
+	init_ubf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.UNIFORM),
+	init_vbf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.VERTEX),
+	init_ibf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.INDEX),
+// helper func for initializing a gpubuffer for shader uniforms
+	init_gbf:(device, queue, buf, name="", usage=0)=> {
+		const gpu_bf = device.createBuffer({
+			label: name,
+			size:  buf.byteLength,
+			usage: usage | GPUBufferUsage.COPY_DST
+		});
+		gfx.write_gbf(queue, gpu_bf, buf);
+		return gpu_bf;
+	},
+	write_gbf:(queue, gpu_bf, buf)=> { queue.writeBuffer(gpu_bf, 0, buf); },
 }
 
 const WGPU_PERSPECTIVE_MATRIX=(fov, aspect, near, far)=> {

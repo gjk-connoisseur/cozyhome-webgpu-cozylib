@@ -41,38 +41,17 @@ const sketch = {
 		props.mdl_m = m4f.identity();								// model matrix
 		props.ivm_m = m4f.identity();								// inverse view matrix
 		props.prj_m = gfx.perspective(g2d.width(), g2d.height());	// projective matrix
-
-		props.mdl_bf = device.createBuffer({ // model matrix
-			label: "Model Matrix",
-			size: props.mdl_m.byteLength,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		}); queue.writeBuffer(props.mdl_bf, 0, props.mdl_m);
-
-		props.ivm_bf = device.createBuffer({ // inverse view matrix
-			label: "Inverse View Matrix",
-			size: props.ivm_m.byteLength,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		}); queue.writeBuffer(props.ivm_bf, 0, props.ivm_m);
-
-		props.prj_bf = device.createBuffer({ // projection matrix
-			label: "Projection Matrix",
-			size: props.prj_m.byteLength,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		}); queue.writeBuffer(props.prj_bf, 0, props.prj_m);
+		props.itm_m = m4f.transpose(m4f.inverse(props.mdl_m), null); // inverse transpose matrix
 
 		props.cube = primitives.cube();
-		props.vbuffer = device.createBuffer({
-			label: "Vertex Buffer",
-			size: props.cube.v_buffer.byteLength,
-			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-		}); queue.writeBuffer(props.vbuffer, 0, props.cube.v_buffer);
 
-		props.tbuffer = device.createBuffer({
-			label: "Index Buffer",
-			size: props.cube.t_buffer.byteLength,
-			usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-		}); queue.writeBuffer(props.tbuffer, 0, props.cube.t_buffer);
+		props.mdl_bf 	= gfx.init_ubf(device, queue, props.mdl_m, "Model Matrix");
+		props.ivm_bf 	= gfx.init_ubf(device, queue, props.ivm_m, "Inverse View Matrix");
+		props.prj_bf 	= gfx.init_ubf(device, queue, props.prj_m, "Projection Matrix");
+		props.itm_bf 	= gfx.init_ubf(device, queue, props.itm_m, "Inverse Transpose Matrix");
 
+		props.vbuffer 	= gfx.init_vbf(device, queue, props.cube.v_buffer, "Vertex Buffer");
+		props.tbuffer	= gfx.init_ibf(device, queue, props.cube.t_buffer, "Index Buffer");
 
 		props.vs_module = device.createShaderModule({
 			label: "Vertex Shader", code: shader.vs_code,
@@ -87,7 +66,8 @@ const sketch = {
 			entries: [
 				{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: {} }, 
 				{ binding: 1, visibility: GPUShaderStage.VERTEX, buffer: {} },
-				{ binding: 2, visibility: GPUShaderStage.VERTEX, buffer: {} }
+				{ binding: 2, visibility: GPUShaderStage.VERTEX, buffer: {} },
+				{ binding: 3, visibility: GPUShaderStage.VERTEX, buffer: {} }
 			]
 		});
 
@@ -98,6 +78,7 @@ const sketch = {
 				{ binding: 0, resource: { buffer: props.mdl_bf } }, // model matrix
 				{ binding: 1, resource: { buffer: props.ivm_bf } }, // inverse view matrix
 				{ binding: 2, resource: { buffer: props.prj_bf } }, // projective matrix
+				{ binding: 3, resource: { buffer: props.itm_bf } }, // projective matrix
 			],
 		});
 		
@@ -156,10 +137,12 @@ const sketch = {
 			m4f.roty(props.elapsedTime()/1000),
 			m4f.rotz(props.elapsedTime()/1000),
 			m4f.rotx(props.elapsedTime()/1000),
+			m4f.scale(0.75 + 0.25*Math.cos(props.elapsedTime()/1000)),
 		);
+		props.itm_m = m4f.transpose(m4f.inverse(props.mdl_m), null); // inverse transpose matrix
 
-		queue.writeBuffer(props.mdl_bf, 0, props.mdl_m);
-
+		gfx.write_gbf(queue, props.mdl_bf, props.mdl_m);
+		gfx.write_gbf(queue, props.itm_bf, props.itm_m);
 // it turns out that every redraw causes webgpu's framebuffer texture to change. We'll
 // redirect our output to the new one every frame
 		swchain.refresh(ctx.getCurrentTexture());
