@@ -1,6 +1,6 @@
 import { bootstrap_engine } from './main.js';			// program wrapper
 import { v3f, v4f, q4f, m4f, m3f } from './algebra.js';	// geometric algebras
-import { io } 	from './io.js';							// importing/exporting, etc.
+import { io, gltf } from './io.js';						// importing/exporting, etc.
 import { gfx } 	from './gfx.js';						// general graphics purposes
 import { shader } from './shaders.js';					// default shaders
 import { primitives } from './mesh.js';					// simple meshes
@@ -25,6 +25,13 @@ const sketch = {
 			canvas_c2d.style.position = 'absolute';
 			center_view.appendChild(canvas_c2d);
 		}
+
+		const file_input = document.getElementById('file-input');
+		file_input.addEventListener('change', (e)=> {
+			gltf.read_glb(e.target.files[0], (ret)=> {
+				console.log(ret);
+			});
+		});
 	},
 	start:async(self, props)=> {
 		const wgpu 		= props.wgpu; 		// webgpu package
@@ -44,6 +51,7 @@ const sketch = {
 		props.itm_m = m4f.transpose(m4f.inverse(props.mdl_m), null); // inverse transpose matrix
 
 		props.cube = primitives.cube();
+		console.log(props.cube);
 
 		props.mdl_bf 	= gfx.init_ubf(device, queue, props.mdl_m, "Model Matrix");
 		props.ivm_bf 	= gfx.init_ubf(device, queue, props.ivm_m, "Inverse View Matrix");

@@ -25,8 +25,7 @@ export const v3f = {
 		return (at >= -eps && at <= eps) ? 0 : Math.sign(at);
 	},
 	perp:(v,q)=> {
-		q[0] = -v[1];
-		q[1] = v[0];
+		q[0] = -v[1]; q[1] = v[0];
 		return q;
 	},
 	unit:(v,q)=> {

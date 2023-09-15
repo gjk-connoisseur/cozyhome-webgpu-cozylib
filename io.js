@@ -57,4 +57,81 @@ export const io = {
 			img.src = path;
 		}).then((img) => { success(img); iop.dequeue(); }).catch(failure);
 	},
+	read_ascii:(view,i=0,j=0,end=false)=> {
+		let ascii = '';
+		if(i < 0 || j > view.byteLength) return ascii;
+		for(;i<j;i++) ascii += String.fromCharCode(view.getUint8(i, end));
+		return ascii;
+	},
 };
+
+export const gltf = {
+	read_glb:(fd, yoink=()=>{})=> {
+		iop.enqueue();
+
+		const error = (msg) => { 
+			iop.dequeue();
+			return { error: true, data:null, msg:msg }
+		}
+		const success = (data, msg) => {
+			iop.dequeue();
+			return { error: false, data:data, msg:'file loaded successfully.' }
+		}
+
+		const reader = new FileReader();
+		reader.onload = (event) => {
+			const HEADER_N = 12; // # of bytes for header
+			const CHUNK_H_N = 8; // # of bytes for chunk header
+
+			const binary_data = event.target.result;
+			if(binary_data.byteLength < HEADER_N) { 
+				yoink(error('file not big enough for glTF header.'));
+				return;
+			}
+		
+			const data_view = new DataView(binary_data);
+// we begin by reading the file's header 4 bytes at a time.
+			let magic = io.read_ascii(data_view, 0, 4, false);
+			const ver_n = data_view.getUint32(4, true);
+			const bytes = data_view.getUint32(8, true);
+
+			if(!magic.includes('glTF')) { yoink(error('file is not glTF format.')); return; }
+			if(ver_n != 2) { yoink(error('glTF version is not version 2.')); return; }
+			if(binary_data.byteLength != bytes) { yoink(error('glb file size mismatch.')); return; }
+// According to Khronos, the first chunk will ALWAYS be the JSON chunk. Let's manually parse it.
+			if(bytes < HEADER_N + CHUNK_H_N) { yoink(error('file has no room for JSON chunk.')); return; }
+			
+			const j_bytes = data_view.getUint32(12, true); // # of bytes in the next chunk.
+			const j_type = io.read_ascii(data_view, 16, 20, false); // chunk type
+			if(!j_type.includes('JSON')) { yoink(error('first chunk was not of type JSON.')); return; }
+			if(j_bytes > bytes - HEADER_N - CHUNK_H_N) { yoink(error('untrustworthy chunk size.')); return; }
+	
+			const CHUNK_JSON_N = HEADER_N + CHUNK_H_N;
+// load the ascii section:
+			const j_ascii = io.read_ascii(data_view, CHUNK_JSON_N, CHUNK_JSON_N + j_bytes, false);
+			const j_json = JSON.parse(j_ascii);
+// now we enter a loop to determine how many binary chunks there are:
+			let i0 = CHUNK_JSON_N + j_bytes;
+			let ci = 1;
+			let bins = [];
+			do {
+				const chunk_b = data_view.getUint32(i0, true);
+				const chunk_t = io.read_ascii(data_view, i0 + 4, i0 + 8, false);
+				bins.push(binary_data.slice(i0 + 8, i0 + 8 + chunk_b));
+
+				i0 += (chunk_b + 8);
+// default comparator does not account for whitespace.
+				if(!chunk_t.includes('BIN')) { yoink(error(`chunk ${ci} was not of type BIN`)); return; }
+				ci++;
+			}while(i0 < bytes);
+
+			yoink(success({ graph: j_json, bins:bins })); return;
+		}
+
+		reader.onerror = (event) => { yoink(error('failed to load file.')); }
+// initiates callback into onload after finishing
+		reader.readAsArrayBuffer(fd);
+		return;
+	}
+};
+
