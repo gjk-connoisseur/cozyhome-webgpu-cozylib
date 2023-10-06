@@ -191,36 +191,6 @@ export const gfx = {
 	},
 // write to a gpubuffer given a set of offsets. defaulted to zero.
 	write_gbf:(queue, gpu_bf, buf)=> { queue.writeBuffer(gpu_bf, 0, buf); },
-	build_layout:(format, stride, offset, binding)=> {
-		return {
-			arrayStride: stride,
-			attributes: [{
-				format: format,
-				offset: offset,				// where in the vertex do we look
-				shaderLocation: binding		// what attribute this maps to
-			}],
-		}	
-	},
-// initialize vertex buffer
-	init_vattr:(device, queue, attr, bin, name)=> {
-		return gfx.init_attr(device, queue, attr, bin, name, GPUBufferUsage.VERTEX);
-	},
-// initialize index buffer
-	init_iattr:(device, queue, attr, bin, name)=> {
-		return gfx.init_attr(device, queue, attr, bin, name, GPUBufferUsage.INDEX);
-	},
-	init_attr:(device, queue, attr, bin, name, usage)=> {
-		const gpu_bf = device.createBuffer({
-			name: name,
-			size: attr.byte_length,
-			usage: usage | GPUBufferUsage.COPY_DST
-		});
-		gfx.write_attr(queue, attr, gpu_bf, bin);
-		return gpu_bf;
-	},
-	write_attr:(queue, attr, gpu_bf, bin)=> {
-		queue.writeBuffer(gpu_bf, 0, bin, attr.byte_offset, attr.byte_length);
-	}
 }
 
 const WGPU_PERSPECTIVE_MATRIX=(fov, aspect, near, far)=> {
@@ -250,3 +220,4 @@ const WGPU_ORTHOGRAPHIC_MATRIX=(left, right, bottom, top, near, far)=> {
       row4col1, row4col2, row4col3, 1
     ]);
 }
+

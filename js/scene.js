@@ -1,182 +1,269 @@
-import { bootstrap_engine } from './main.js';			// program wrapper
-import { v3f, v4f, q4f, m4f, m3f } from './algebra.js';	// geometric algebras
-import { io, gltf } from './io.js';						// importing/exporting, etc.
-import { gfx } 	from './gfx.js';						// general graphics purposes
-import { shader } from './shaders.js';					// default shaders
-import { primitives } from './mesh.js';					// simple meshes
+// lightweight scene API
+// CREDITS: Daniel J. Cucuzza
+// DATE: September 24th, 2023
 
-window.addEventListener("load", (event)=> { bootstrap_engine(sketch); });
+// You can contact me at gaunletgames@gmail.com if you have
+// any questions about the implementation or if you notice
+// any errors.
 
-const sketch = {
-	load: async(self, props)=> {
-		const width = 1024;
-		const height = 768;
-// appending a webgpu canvas to the center view tree element.
-		props.wgpu = await props.createWebGPUCanvas(width,height, "WebGPU");
-		props.c2d = await props.create2DCanvas(width,height,"C2D");
-		props.g2d = props.c2d.g2d;
-// reposition the canvases into the center of the document
-		const canvas_wgpu = props.wgpu.ctx.canvas;
-		const canvas_c2d  = props.c2d.ctx.canvas;
-		const center_view = document.getElementById("center_view");
+import { m4f, v4f, q4f } from './algebra.js';
+import { uid_handler, object_list } from './state.js';
+import { object_queue } from './state.js';
 
-		if(center_view) { 
-			center_view.appendChild(canvas_wgpu);
-			canvas_c2d.style.position = 'absolute';
-			center_view.appendChild(canvas_c2d);
-		}
+// human friendly/glTF friendly format for representing transformation matrices:
+export class scene_transitive {
+	#_shift; #_twist; #_scale;
+	#_matrix;
+	#_dframe;
 
-		const file_input = document.getElementById('file-input');
-		file_input.addEventListener('change', (e)=> {
-			gltf.read_glb(e.target.files[0], (ret)=> {
-				const data = ret.data;
-				const mesh = gltf.find_mesh(data.graph, data.bins, data.graph.meshes[0]);
-// upload buffer to the gpu
-				const device 	= props.wgpu.device;	// GPU device
-				const queue		= device.queue;			// draw call queue
-				const bin = data.bins[0];
-	
-				props.mesh = mesh;
-				props.pbuffer = gfx.init_vattr(device, queue, mesh.position, bin, "Position Buffer");
-				props.nbuffer = gfx.init_vattr(device, queue, mesh.normal, bin, "Normal Buffer");
-				props.tbuffer = gfx.init_iattr(device, queue, mesh.indices, bin, "Index Buffer");
+	constructor(dframe = null,
+			shift = v4f.vec(0,0,0,1),
+			twist = q4f.identity(),
+			scale = v4f.vec(1,1,1,1)) {
+		this.#_shift = shift;
+		this.#_twist = twist;
+		this.#_scale = scale;
+		this.#_dframe = dframe;
 
-// vertex layout
-				props.p_layout = gfx.build_layout('float32x3', 12, 0, 0);
-				props.n_layout = gfx.build_layout('float32x3', 12, 0, 1);
-
-// render pipeline
-				const cformat = props.swapchain.format;
-				props.r_pipe = device.createRenderPipeline({
-					label: "Render Pipeline", layout: props.r_layout,
-					depthStencil: {
-						depthWriteEnabled: true,
-						depthCompare: "less",
-						format: "depth24plus",
-					},
-					vertex:   { module: props.vs_module, entryPoint: "vmain", buffers: [ props.p_layout, props.n_layout ] },
-					fragment: { module: props.fs_module, entryPoint: "fmain", targets: [ { format: cformat } ] },
-				});
-
-			});
-		});
-	},
-	start:async(self, props)=> {
-		const wgpu 		= props.wgpu; 		// webgpu package
-		const g2d		= props.g2d;
-		const ctx 		= wgpu.ctx;	  		// webgpu context
-		const canvas	= ctx.canvas;		// drawing canvas
-
-		const device 	= wgpu.device;		// GPU device
-		const queue		= device.queue;		// draw call queue
-
-// create a double buffer that we will use for the sketch:
-		props.swapchain = gfx.createSwapchain(ctx.getCurrentTexture(), device, wgpu.format);
-
-		props.mdl_m = m4f.identity();									// model matrix
-		props.ivm_m = m4f.identity();									// inverse view matrix
-		props.prj_m = gfx.perspective(g2d.width(), g2d.height());		// projective matrix
-		props.itm_m = m4f.transpose(m4f.inverse(props.mdl_m), null); 	// inverse transpose matrix
-
-// uniforms
-		props.mdl_bf 	= gfx.init_ubf(device, queue, props.mdl_m, "Model Matrix");
-		props.ivm_bf 	= gfx.init_ubf(device, queue, props.ivm_m, "Inverse View Matrix");
-		props.prj_bf 	= gfx.init_ubf(device, queue, props.prj_m, "Projection Matrix");
-		props.itm_bf 	= gfx.init_ubf(device, queue, props.itm_m, "Inverse Transpose Matrix");
-
-// vertex buffers, index buffers
-//		props.pbuffer 	= gfx.init_vbf(device, queue, props.cube.p_buffer, "Point Buffer");
-//		props.nbuffer 	= gfx.init_vbf(device, queue, props.cube.n_buffer, "Normal Buffer");
-//		props.tbuffer	= gfx.init_ibf(device, queue, props.cube.t_buffer, "Index Buffer");
-
-// shaders
-		props.vs_module = device.createShaderModule({ label: "Vertex Shader", code: shader.vs_code });
-		props.fs_module = device.createShaderModule({ label: "Fragment Shader", code: shader.fs_code });
-
-		props.bg_layout = device.createBindGroupLayout({
-			label: "Bind Group Layout",
-			entries: [
-				{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: {} },  // model
-				{ binding: 1, visibility: GPUShaderStage.VERTEX, buffer: {} },	// inverse view
-				{ binding: 2, visibility: GPUShaderStage.VERTEX, buffer: {} },  // projection
-				{ binding: 3, visibility: GPUShaderStage.VERTEX, buffer: {} }   // inverse transpose model
-			]
-		});
-
-		props.bgroup = device.createBindGroup({
-			label: "Bind Group",
-			layout: props.bg_layout,
-			entries: [
-				{ binding: 0, resource: { buffer: props.mdl_bf } }, // model matrix
-				{ binding: 1, resource: { buffer: props.ivm_bf } }, // inverse view matrix
-				{ binding: 2, resource: { buffer: props.prj_bf } }, // projective matrix
-				{ binding: 3, resource: { buffer: props.itm_bf } }, // inverse transpose model
-			],
-		});
-		
-		props.r_layout = device.createPipelineLayout({
-			label: "Render Pipeline Layout", bindGroupLayouts: [ props.bg_layout ]
-		});
-
-	},
-	pulse:(self, props)=> {
-		const dt = props.deltaTime() / 1000;
-		const et = props.elapsedTime() / 1000;
-
-		const g2d = props.g2d;
-		g2d.refresh();
-		g2d.clear();
-		g2d.aliasing(true);
-
-		self.draw(self, props);
-	},
-	draw:(self, props)=> {
-		const wgpu 		= props.wgpu; 		// webgpu package
-		const ctx 		= wgpu.ctx;	  		// webgpu context
-		const device 	= wgpu.device;		// GPU device
-		const queue		= device.queue;		// draw call queue
-		const swchain	= props.swapchain;	// swapchain
-
-// compute transformation matrix
-		props.mdl_m = m4f.stack(
-			m4f.shift(v4f.vec(0,0,-8,1)),
-			m4f.roty(props.elapsedTime()/1000),
-			m4f.rotz(props.elapsedTime()/1000),
-			m4f.rotx(props.elapsedTime()/1000),
-			m4f.scale(0.75 + 0.25*Math.cos(props.elapsedTime()/1000)),
+		this.apply();
+	}
+// updates + returns the matrix configuration for shift, twist, scale
+	apply=(device=null, queue=null)=> {
+		this.#_matrix = m4f.stack(
+			m4f.shift(this.#_shift), 	// v4f -> m4f
+			q4f.to_m4f(this.#_twist),	// q4f -> m4f
+			m4f.scale(this.#_scale),	// v4f -> m4f
 		);
 
-// recompute inverse transpose matrix
-		props.itm_m = m4f.transpose(m4f.inverse(props.mdl_m), null);
+		if(this.#_dframe != null) {
+			this.#_dframe.set(this.#_matrix);
+			if(device != null && queue != null) {
+				this.#_dframe.bind(device, queue);
+			}
+		}
+		return this.#_matrix;
+	}
 
-// update the matrix values for both the inverse transpose and the model matrix
-		gfx.write_gbf(queue, props.mdl_bf, props.mdl_m);
-		gfx.write_gbf(queue, props.itm_bf, props.itm_m);
+	get_shift=(q=v4f.vec(0,0,0,1))=> v4f.copy(this.#_shift, q);
+	set_shift=(q=v4f.vec(0,0,0,1))=> v4f.copy(this.#_shift, q);
 
-// it turns out that every redraw causes webgpu's framebuffer texture to change. We'll
-// redirect our output to the new one every frame
-		swchain.refresh(ctx.getCurrentTexture());
+	get_twist=(q=q4f.identity())=> q4f.copy(this.#_shift, q);
+	set_twist=(q=q4f.identity())=> q4f.copy(this.#_shift, q);
 
-		if(!props.r_pipe) return;
+	get_scale=(q=v4f.vec(1,1,1,1))=> q4f.copy(this.#_scale, q);
+	set_scale=(q=v4f.vec(1,1,1,1))=> q4f.copy(this.#_scale, q);
 
-/* DRAW CALLS BEGIN */
-// encodes draw calls to gpu queue before submission
-		const encoder = device.createCommandEncoder();
-// empty the buffered texture before drawing anything
-		swchain.clear(encoder, (pass) => {
-			pass.setPipeline(props.r_pipe);
-			pass.setBindGroup(0, props.bgroup);
-
-			pass.setVertexBuffer(0, props.pbuffer);
-			pass.setVertexBuffer(1, props.nbuffer);
-
-			pass.setIndexBuffer(props.tbuffer, "uint16");
-			pass.drawIndexed(~~(props.tbuffer.size / 2));
-		}, 0, 0, .2, 1);
-
-		swchain.flush(ctx, encoder);
-/* DRAW CALLS END */
-// tell queue to actually process its render passes and commands
-		queue.submit([encoder.finish()]);
+	capture=(handle=(shift, twist, scale)=>{})=> {
+		handle(this.#_shift, this.#_twist, this.#_scale);
+		return this;
 	}
 }
+
+// storage device for all gltf_mesh models in a given context. This class is primarily where
+// mesh data will be accessed, loaded, and kept.
+export class scene_context {
+	#_mesh_registry; // what meshes are stored in this gltf file
+// build a repository of all meshes stored in the gltf file.
+	constructor(data) { 
+		const registry = new object_list(new uid_handler(), {});
+		for(const mesh_type of data.graph.meshes) {
+			registry.write_obj(()=> new scene_mesh(), {
+				name:		mesh_type.name,				// name
+				primitive: 	mesh_type.primitives[0],	// attributes
+				graph: 		data.graph,					// json
+				bins:  		data.bins					// binary
+			});
+		}
+		this.#_mesh_registry = registry;
+	}
+// load the vertex and element buffers into VRAM
+	store_all(device, queue) {
+		const registry = this.#_mesh_registry;
+
+		for(let i=1;i < registry.length();i++) {
+			const mesh_obj = registry.get_obj(i);
+			if(mesh_obj != null) {
+				mesh_obj.store(device, queue);
+			}
+		}
+	}
+	get_mesh(index) { return this.#_mesh_registry.get_obj(index); }
+}
+
+export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
+// build local matrix for this gltf node
+	const build_trs=(root)=> {
+		console.log(root);
+		const t = root.translation;
+		const r = root.rotation;
+		const s = root.scale;
+		
+		let m = m4f.identity();
+		if(s != undefined) { 
+			s.push(1);
+// maintain type consistency. m4f is expecting a v4f, not v3f.
+			m = m4f.multiply(m4f.diag(s), m);
+		}
+		if(r != undefined) {
+			m = m4f.multiply(q4f.to_m4f(r), m);
+		}
+		if(t != undefined) { 
+			//t[2] *= -1;
+			t.push(1);
+// maintain type consistency. m4f is expecting a v4f, not v3f.
+			m = m4f.multiply(m4f.shift(t), m);
+		}
+
+
+		return m; // TRS := Translation * Rotation * Scale
+	}
+
+	const nodes = data.graph.nodes;
+	const node_queue = new object_queue();
+
+// get highest layer of nodes in scene and concatenate to queue in
+// order to initiate breadth first query
+	for(let i=0;i<scene.nodes.length;i++) {
+		const node_index = scene.nodes[i];
+		const child_node = { 
+			index: node_index,
+//			matrix: m4f.identity()
+			matrix: build_trs(nodes[node_index]),
+		};
+		yoink(child_node, nodes[node_index].mesh);
+		node_queue.push(child_node);
+	}
+
+// avoid stack-recursion and use breadth-first bleed instead:
+	while(node_queue.count() > 0) {
+		const node_obj = node_queue.pop();
+		const index = node_obj.index;
+// parent transform
+		const matrix = node_obj.matrix;
+		const node = nodes[index];
+
+		const children = node.children;
+		if(node.children == null) continue;
+
+// append children for concatenation
+		for(let i=0;i<children.length;i++) {
+			const child_index = children[i];
+// local transform
+			const child_matrix = build_trs(nodes[child_index]);
+			const child_node = {
+				index: child_index,
+				matrix: m4f.multiply(matrix, child_matrix)
+			}
+
+			yoink(child_node, nodes[child_index].mesh);
+			node_queue.push(child_node);
+		}
+	}
+}
+
+// storage class for raw binary mesh data and its 
+// corresponding buffers inside the GPU.
+export class scene_mesh {
+	#_loaded; #_binded; #_uid; #_name;
+	constructor() {
+		this.#_binded = false;
+		this.#_loaded = false;
+		this.#_name   = "";
+		this.#_uid = 0;
+	}
+// responsible for allocating and storing mesh data to the gpu device.
+	store=(device, queue)=> {
+		if(this.#_loaded) return;
+
+		for(const type in this.attributes) {
+			const attribute = this.attributes[type];
+
+			const binary = attribute.binary;		// typed array of attr data
+			const blength = attribute.byteLength;	// amount of bytes total
+			const boffset = attribute.byteOffset;	// how far in binary to read from
+
+// allocate memory for the vertex buffer
+			const vgpu_buffer = device.createBuffer({
+				name: type,
+				size: blength,
+				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+			});
+			queue.writeBuffer(vgpu_buffer, 0, binary, boffset, blength);
+			attribute.buffer = vgpu_buffer;
+		}
+// load the index buffer
+		const attribute = this.INDICES;
+		const binary  = attribute.binary;
+		const blength = attribute.byteLength;
+		const boffset = attribute.byteOffset;
+
+		const igpu_buffer = device.createBuffer({
+			name: "INDICES",
+			size: blength,
+			usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
+		});
+		queue.writeBuffer(igpu_buffer, 0, binary, boffset, blength);
+		attribute.buffer = igpu_buffer;
+
+		this.#_loaded = true;
+	}
+	draw_indexed=(pass)=> {
+		pass.setIndexBuffer(this.INDICES.buffer, "uint16");
+		pass.drawIndexed(~~(this.INDICES.buffer.size / 2));
+	}
+	loaded=()=> { return this.#_loaded; }
+	uid=()=> { return this.#_uid; }
+// ran by the object list implicitly after construction.
+	bind=(props)=> {
+		const primitive = props.primitive;
+		const graph = props.graph;
+		const bins = props.bins;
+
+		const buffer_views = graph.bufferViews;
+		const accessors = graph.accessors;
+
+// { POSITION, NORMAL, TEXCOORD_0 }
+		const mesh_attr = {};
+		for(const obj in primitive.attributes) {
+			const accessor = accessors[ primitive.attributes[obj] ];
+			const buffer_view = buffer_views[ accessor.bufferView ];
+			const attr = {};
+// get the component type and tuple type
+			attr.type 		   = accessor.type;
+			attr.componentType = accessor.componentType;
+// get the buffer view
+			attr.byteLength = buffer_view.byteLength;
+			attr.byteOffset = buffer_view.byteOffset;
+// binary and gpu buffer
+			attr.binary	= bins[ buffer_view.buffer ];
+			attr.buffer = null;
+	
+			mesh_attr[obj] = attr;
+		}
+// handle indices
+		if(primitive.indices != null) {
+			const indices_id = primitive.indices;
+			const accessor = accessors[ indices_id ];
+			const buffer_view = buffer_views[ accessor.bufferView ];
+// buffer views
+			const indices = {};
+			indices.byteLength = buffer_view.byteLength;
+			indices.byteOffset = buffer_view.byteOffset;
+// binary and gpu buffer
+			indices.binary = bins[ buffer_view.buffer ];
+			indices.buffer = null;
+
+			if((indices.byteLength % 4) != 0) {
+				indices.byteLength -= indices.byteLength % 4;
+				console.log(`${props.name} has element buffer size in non-multiple of 4. Fixing now.`);
+			}
+			this["INDICES"] = indices;
+		}
+
+		this.attributes = mesh_attr;	// all vertex attributes
+		this.#_name 	= props.name;	// name of mesh
+		this.#_uid 		= props.id;		// universal context mesh id
+		this.#_binded 	= true;			// bound (CPU data ready)
+	}
+}
+

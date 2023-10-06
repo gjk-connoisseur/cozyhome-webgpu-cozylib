@@ -57,24 +57,13 @@ export const io = {
 			img.src = path;
 		}).then((img) => { success(img); iop.dequeue(); }).catch(failure);
 	},
-	read_ascii:(view,i=0,j=0,end=false)=> {
-		let ascii = '';
-		if(i < 0 || j > view.byteLength) return ascii;
-		for(;i<j;i++) ascii += String.fromCharCode(view.getUint8(i, end));
-		return ascii;
-	},
+
 };
 
-export const gltf = {
-	tuple_type:(val)=> {
-		if(val == 5120) return "int8";
-		else if(val == 5121) return "uint8";
-		else if(val == 5122) return "int16";
-		else if(val == 5123) return "uint16";
-		else if(val == 5125) return "uint_32";
-		else if(val == 5126) return "float32";
-		else return undefined;
-	},
+// responsible for parsing and returning a valid glTF Javascript object.
+// -DC @ 9/24/23
+export const gltf_reader = {
+// produces a glTF object given a file and returns it in yoink
 	read_glb:(fd, yoink=()=>{})=> {
 		iop.enqueue();
 
@@ -100,7 +89,7 @@ export const gltf = {
 		
 			const data_view = new DataView(binary_data);
 // we begin by reading the file's header 4 bytes at a time.
-			let magic = io.read_ascii(data_view, 0, 4, false);
+			let magic = gltf_reader.read_ascii(data_view, 0, 4, false);
 			const ver_n = data_view.getUint32(4, true);
 			const bytes = data_view.getUint32(8, true);
 
@@ -111,13 +100,13 @@ export const gltf = {
 			if(bytes < HEADER_N + CHUNK_H_N) { yoink(error('file has no room for JSON chunk.')); return; }
 			
 			const j_bytes = data_view.getUint32(12, true); // # of bytes in the next chunk.
-			const j_type = io.read_ascii(data_view, 16, 20, false); // chunk type
+			const j_type = gltf_reader.read_ascii(data_view, 16, 20, false); // chunk type
 			if(!j_type.includes('JSON')) { yoink(error('first chunk was not of type JSON.')); return; }
 			if(j_bytes > bytes - HEADER_N - CHUNK_H_N) { yoink(error('untrustworthy chunk size.')); return; }
 	
 			const CHUNK_JSON_N = HEADER_N + CHUNK_H_N;
 // load the ascii section:
-			const j_ascii = io.read_ascii(data_view, CHUNK_JSON_N, CHUNK_JSON_N + j_bytes, false);
+			const j_ascii = gltf_reader.read_ascii(data_view, CHUNK_JSON_N, CHUNK_JSON_N + j_bytes, false);
 			const j_json = JSON.parse(j_ascii);
 // now we enter a loop to determine how many binary chunks there are:
 			let i0 = CHUNK_JSON_N + j_bytes;
@@ -125,7 +114,7 @@ export const gltf = {
 			let bins = [];
 			do {
 				const chunk_b = data_view.getUint32(i0, true);
-				const chunk_t = io.read_ascii(data_view, i0 + 4, i0 + 8, false);
+				const chunk_t = gltf_reader.read_ascii(data_view, i0 + 4, i0 + 8, false);
 				bins.push(binary_data.slice(i0 + 8, i0 + 8 + chunk_b));
 
 				i0 += (chunk_b + 8);
@@ -142,45 +131,10 @@ export const gltf = {
 		reader.readAsArrayBuffer(fd);
 		return;
 	},
-// locates all necessary information for a given mesh to be draw on screen
-	find_mesh:(graph, bins, j_mesh)=> {
-		const primitives = j_mesh.primitives[0];
-// get the members
-		const attributes = primitives.attributes;
-		const types = { indices: primitives.indices };
-		for(const type in attributes) {
-			types[type.toLowerCase()] = attributes[type];
-		}
-// get all accessor parameters
-		const accessors = {};
-		for(const type in types) {
-			accessors[type] = graph.accessors[types[type]];
-		}
-// get all buffer views associated with each buffer view in accessors.
-		const views = {};
-		for(const accessor in accessors) {
-			views[accessor] = graph.bufferViews[ accessors[accessor].bufferView ];
-		}
-// get access to where the memory for each vertex/index buffer is stored in memory.
-		const buffers = {};
-		for(const view in views) {
-			buffers[view] = bins[views[view].buffer];
-		}
-// now, we'll simplify the data model:
-		const mesh = {};
-		for(const type in types) {
-// we no longer give a shit about indices. If we want to modify our mesh and keep its changes
-// separately, we'll need to deep copy it. -DC @ 9/15/23
-			mesh[type] = {
-				buffer_id:		views[type].buffer,					// what memory are we attached to
-				byte_length:	views[type].byteLength,				// where in memory
-				byte_offset:	views[type].byteOffset,				// how much of memory
-				type:			gltf.tuple_type(accessors[type].componentType), // what tuple?
-				tuple_count:	accessors[type].count,				// how many tuples?
-				tuple_type: 	accessors[type].type.toLowerCase(),	// what datatype?
-			};
-		}
-		return mesh;
+	read_ascii:(view,i=0,j=0,end=false)=> {
+		let ascii = '';
+		if(i < 0 || j > view.byteLength) return ascii;
+		for(;i<j;i++) ascii += String.fromCharCode(view.getUint8(i, end));
+		return ascii;
 	},
 };
-

@@ -10,7 +10,7 @@ import { io } from './io.js';
 import { gfx } from './gfx.js';
 
 // construct a canvas element that we will draw to.
-const create_canvas=(w=1280,h=720,name=null)=> {
+const create_canvas=(w=1280, h=720, name=null)=> {
 	const wcanvas = document.createElement("canvas");
 	wcanvas.id = name;
 	wcanvas.width = w;
@@ -18,7 +18,6 @@ const create_canvas=(w=1280,h=720,name=null)=> {
 
 	return wcanvas;
 }
-
 // create a gameloop that we will inject draw calls into.
 const create_pulse=()=> {
 	const heart = {
@@ -28,7 +27,7 @@ const create_pulse=()=> {
 			heart.n_time = heart.s_time + heart.duration;
 			heart.dt = 0;
 			heart.think = think;
-			heart.pulse();
+			heart.pulse(0);
 // give information to the simulation
 			props.elapsedTime = () => heart.c_time;
 			props.deltaTime   = () => heart.dt;
@@ -36,8 +35,7 @@ const create_pulse=()=> {
 			heart.entity = entity; // who is pulsing?
 			heart.props = props;   // what are its properties?
 		},
-		pulse: () => {
-			const t_stamp = performance.now();
+		pulse: (t_stamp) => {
 // differentiate change in time
 			heart.dt = t_stamp - heart.c_time;
 // calculate elapsed time
@@ -75,7 +73,10 @@ export const bootstrap_engine= async(self)=> {
 		const on_error = (msg) => { error: true, msg };
 
 		if(!canvas) return on_error("canvas was null.");
-		const adapter = await navigator.gpu.requestAdapter();
+		const adapter = await navigator.gpu.requestAdapter({ 
+			powerPreference: "high-performance" 
+		});
+
 		if(!adapter) return on_error("adapter was null.");
 		const device = await adapter.requestDevice();
 		if(!device) return on_error("device was null.");
@@ -112,10 +113,11 @@ export const bootstrap_engine= async(self)=> {
 	if(self.on_click) window.addEventListener("click", (event) => self.on_click(props, event));
 	if(self.on_click_down) window.addEventListener("mousedown", (event) => self.on_click_down(props, event));
 	if(self.on_click_up) window.addEventListener("mouseup", (event) => self.on_click_up(props, event));
+	
 // key operations
-	if(self.on_key) window.addEventListener("keypress", (event) => self.on_key(props, event));
-	if(self.on_key_down) window.addEventListener("keydown", (event) => self.on_key_down(props, event));
-	if(self.on_key_up) window.addEventListener("keyup", (event) => self.on_key_up(props, event));
+	if(self.on_key) window.addEventListener("key", (event) => self.on_key(self, props, event));
+	if(self.on_key_down) window.addEventListener("keydown", (event) => self.on_key_down(self, props, event));
+	if(self.on_key_up) window.addEventListener("keyup", (event) => self.on_key_up(self, props, event));
 	
 	const begin_sim=()=> {
 		if(self.start) self.start(self, props);

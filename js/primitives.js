@@ -9,6 +9,7 @@
 import { v4f } from './algebra.js';
 
 export const primitives = {
+// no i/o required. very sloppy but returns vertex buffers and elements
 	cube:()=> {
 		let vec = v4f.vec();
 		const at = (i, v) => {
@@ -18,16 +19,13 @@ export const primitives = {
 			for(let i=0;i<3;i++) v[i] = -0.5 + v[i];
 			return v;
 		}
-
 		const cycle = (i,j=0) => {
 			i %= 4;
 			return 4*j + i + ~~((i+1)/3) * (1 - 2*~~((i+1)/4));
 		}
-
 		const v_size = 3;
 		const p_buffer = new Float32Array(v_size * 24);
 		const n_buffer = new Float32Array(v_size * 24);
-
 		const add_vert=(i,j=0)=> {
 			vec = at(i, vec);
 			for(let k = 0;k<3;k++) {

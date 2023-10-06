@@ -10,13 +10,14 @@
 export const v3f = {
 	vec:(x=0,y=0,z=0)=>{
 		const buf = new Float32Array(3);
-		v4f.set(buf,x,y,z);
+		v3f.set(buf,x,y,z);
 		return buf;
 	},
+	copy:(a,b)=> { for(let i=0;i<3;i++) b[i] = a[i]; return b; },
 	set:(v,x=0,y=0,z=0)=> { v[0] = x; v[1] = y; v[2] = z; },
-	add:(v,w,q)=> { for(let i=0;i<3;i++) q[i] = v[i] + w[i]; return q; },
-	sub:(v,w,q)=> { for(let i=0;i<3;i++) q[i] = v[i] - w[i]; return q; },
-	mul:(c,v,q)=> { for(let i=0;i<3;i++) q[i] = c*v[i]; return q; },
+	add:(v,w,q = v3f.vec(0,0,1))=> { for(let i=0;i<3;i++) q[i] = v[i] + w[i]; return q; },
+	sub:(v,w,q = v3f.vec(0,0,1))=> { for(let i=0;i<3;i++) q[i] = v[i] - w[i]; return q; },
+	mul:(c,v,q = v3f.vec(0,0,1))=> { for(let i=0;i<3;i++) q[i] = c*v[i]; return q; },
 	dot:(v,w)  => v[0]*w[0] + v[1]*w[1] + v[2]*w[2],
 	norm:(v)   => Math.sqrt(v3f.dot(v,v)),
 	blade:(v,w) => v[0]*w[1] - v[1]*w[0], // attitude + orientation
@@ -29,7 +30,7 @@ export const v3f = {
 		return q;
 	},
 	unit:(v,q)=> {
-		const n = v4f.norm(v);
+		const n = v3f.norm(v);
 		for(let i=0;i<3;i++) { q[i] = v[i] / n; }
 		return q;
 	},
@@ -49,7 +50,7 @@ export const v3f = {
 export const m3f = {
 	zero:()=>new Float32Array(9),
 	clear:(a)=> { for(let i=0;i<9;i++) a[i] = 0; },
-	copy:(a,b)=> { for(let i=0;i<9;i++) b[i] = a[i]; },
+	copy:(a,b)=> { for(let i=0;i<9;i++) b[i] = a[i]; return b; },
 	diag:(e=1, q=m3f.zero())=> {
 		const buf = m3f.zero();
 		for(let i=0,j=0;i<9;i+=3,j++) buf[i+j] = e;
@@ -151,15 +152,16 @@ export const m3f = {
 
 // projective 3-vectors used for affine maps in R^3.
 export const v4f = {
-	vec:(x=0,y=0,z=0,w=0)=>{
+	vec:(x=0,y=0,z=0,w=1)=>{
 		const buf = new Float32Array(4);
 		v4f.set(buf,x,y,z,w);
 		return buf;
 	},
+	copy:(a,b)=> { for(let i=0;i<4;i++) b[i] = a[i]; return b; },
 	set:(v,x=0,y=0,z=0,w=0)=> { v[0] = x; v[1] = y; v[2] = z; v[3] = w; },
-	add:(v,w,q)=> { for(let i=0;i<4;i++) q[i] = v[i] + w[i]; return q; },
-	sub:(v,w,q)=> { for(let i=0;i<4;i++) q[i] = v[i] - w[i]; return q; },
-	mul:(c,v,q)=> { for(let i=0;i<4;i++) q[i] = c*v[i]; return q; },
+	add:(v,w,q = v4f.vec(0,0,0,0))=> { for(let i=0;i<4;i++) q[i] = v[i] + w[i]; return q; },
+	sub:(v,w,q = v4f.vec(0,0,0,0))=> { for(let i=0;i<4;i++) q[i] = v[i] - w[i]; return q; },
+	mul:(c,v,q = v4f.vec(0,0,0,0))=> { for(let i=0;i<4;i++) q[i] = c*v[i]; return q; },
 	dot:(v,w)  => v[0]*w[0] + v[1]*w[1] + v[2]*w[2] + v[3]*w[3],
 	norm:(v)   => Math.sqrt(v4f.dot(v,v)),
 	cross:(v,w,q)=> {
@@ -170,7 +172,11 @@ export const v4f = {
 	},
 	unit:(v,q)=> {
 		const n = v4f.norm(v);
-		for(let i=0;i<4;i++) { q[i] = v[i] / n; }
+		if(n >= 0.0001) {
+			for(let i=0;i<4;i++) { q[i] = v[i] / n; }
+		}else {
+			for(let i=0;i<4;i++) { q[i] = v[i] }
+		}
 		return q;
 	},
 	lerp:(v,w,q,t=0)=> {
@@ -190,11 +196,19 @@ export const v4f = {
 export const m4f = {
 	zero:()=>new Float32Array(16),
 	clear:(a)=> { for(let i=0;i<16;i++) a[i] = 0; },
-	copy:(a,b)=> { for(let i=0;i<16;i++) b[i] = a[i]; },
-	diag:(e=1, q=m4f.zero())=> {
+	copy:(a,b)=> { for(let i=0;i<16;i++) b[i] = a[i]; return b; },
+	diag:(e=v4f.vec(1,1,1,1), q=m4f.zero())=> {
 		const buf = m4f.zero();
-		for(let i=0,j=0;i<16;i+=4,j++) buf[i+j] = e;
+		for(let i=0,j=0;i<16;i+=4,j++) buf[i+j] = e[j];
 		return buf;
+	},
+	diff:(a,b, eps=0.0001)=> {
+		let i = 0;
+		for(;i<16;i++) {
+			const dx = a[i] - b[i];
+			if(dx < eps || dx > -eps) break;
+		}
+		return i < 16;
 	},
 	identity:()=> m4f.diag(),
 	multiply:(a,b,c=m4f.zero())=> {
@@ -264,7 +278,12 @@ export const m4f = {
 		a[10] = 1; 	 a[15] = 1;
 		return a;
 	},
-	scale:(e=1,a=m4f.zero())=> {
+	uscale:(e=1, a=m4f.zero()) => {
+		a = m4f.diag(v4f.vec(e,e,e,e), a); a[15] = 1;
+		return a;
+	},
+// non-uniform scale
+	scale:(e=v4f.vec(1,1,1,1), a=m4f.zero())=> {
 		a = m4f.diag(e, a); a[15] = 1;
 		return a;
 	},
@@ -274,7 +293,7 @@ export const m4f = {
 		return a;
 	},
 	map:(a,x)=> {
-		x.set(
+		v4f.set(x,
 			a[0]*x[0] + a[4]*x[1] + a[ 8]*x[2] + a[12]*x[3],
 			a[1]*x[0] + a[5]*x[1] + a[ 9]*x[2] + a[13]*x[3],
 			a[2]*x[0] + a[6]*x[1] + a[10]*x[2] + a[14]*x[3],
@@ -284,7 +303,7 @@ export const m4f = {
 	},
 	amap:(a,x)=> {
 		const abs = (y) => y > 0 ? y : -y;
-		x.set(
+		v4f.set(x,
 			-abs(a[0])*x[0] - abs(a[4])*x[1] - abs(a[ 8])*x[2] + abs(a[12])*x[3],
 			-abs(a[1])*x[0] - abs(a[5])*x[1] - abs(a[ 9])*x[2] + abs(a[13])*x[3],
 			-abs(a[2])*x[0] - abs(a[6])*x[1] - abs(a[10])*x[2] + abs(a[14])*x[3],
@@ -309,6 +328,13 @@ export const m4f = {
 // versors
 export const q4f = {
 	zero:()=>new Float32Array(4),
+	vec:(x=0,y=0,z=0,w=1)=>{
+		const buf = new Float32Array(4);
+		q4f.set(buf,x,y,z,w);
+		return buf;
+	},
+	copy:(a,b)=> { for(let i=0;i<4;i++) b[i] = a[i]; return b; },
+	set:(v,x=0,y=0,z=0,w=0)=> { v[0] = x; v[1] = y; v[2] = z; v[3] = w; },
 	clear:(a)=> { for(let i=0;i<4;i++) a[i] = 0; },
 	dot:(v,w)=> v[0]*w[0] + v[1]*w[1] + v[2]*w[2] + v[3]*w[3],
 	norm:(v)=> Math.sqrt(q4f.dot(v,v)),
@@ -322,12 +348,12 @@ export const q4f = {
 		q[3] = 1;
 		return q;
 	},
-	multiply:(v,w,q)=> {
+	multiply:(v,w,q=q4f.identity())=> {
 // https://en.wikipedia.org/wiki/Quaternion#Multiplication_of_basis_elements
 		q[0] = v[3]*w[0] + v[0]*w[3] + v[1]*w[2] - v[2]*w[1];
 		q[1] = v[3]*w[1] + v[1]*w[3] + v[2]*w[0] - v[0]*w[2];
 		q[2] = v[3]*w[2] + v[2]*w[3] + v[0]*w[1] - v[1]*w[0];
-		q[3] = a[3]*w[3] - v[0]*w[0] - v[1]*w[1] - v[2]*w[2];
+		q[3] = v[3]*w[3] - v[0]*w[0] - v[1]*w[1] - v[2]*w[2];
 		return q;
 	},
 	inverse:(v,q)=> {
@@ -340,7 +366,9 @@ export const q4f = {
 		for(let i=1;i<4;i++) q[i] = -v[i];
 		return q;
 	},	
-	axis_angle:(axis, angle, q)=> {
+	axis_angle:(axis = v4f.vec(0,1,0), angle=0, q=q4f.identity())=> {
+		axis = v4f.unit(axis, axis);
+
 		const half = angle / 2;
 		const sh = Math.sin(half);
 		const ch = Math.cos(half);
@@ -348,21 +376,22 @@ export const q4f = {
 		q[3] = ch;
 		return q;
 	},
-	to_matrix:(v,q)=> {
+	to_m4f:(v,q=m4f.identity())=> {
 		q4f.unit(v,v);
 
 		m4f.clear(q);
 		q[0]  = 1 - 2*v[1]*v[1] - 2*v[2]*v[2];
-		q[1]  =     2*v[0]*v[1] - 2*v[3]*v[2];
-		q[2]  =     2*v[0]*v[2] + 2*v[3]*v[1];
+		q[1]  =     2*v[0]*v[1] + 2*v[3]*v[2];
+		q[2]  =     2*v[0]*v[2] - 2*v[3]*v[1];
 
-		q[4]  = 	2*v[0]*v[1] + 2*v[3]*v[2];
+		q[4]  = 	2*v[0]*v[1] - 2*v[3]*v[2];
 		q[5]  = 1 - 2*v[0]*v[0] - 2*v[2]*v[2];
-		q[6]  =     2*v[1]*v[2] - 2*v[3]*v[0];
+		q[6]  =     2*v[1]*v[2] + 2*v[3]*v[0];
 		
-		q[12] =     2*v[0]*v[2] - 2*v[3]*v[1];
-		q[13] =     2*v[1]*v[2] + 2*v[3]*v[0];
-		q[14] =	1 - 2*v[0]*v[0] - 2*v[1]*v[1];
+		q[8]  =     2*v[0]*v[2] + 2*v[3]*v[1];
+		q[9]  =     2*v[1]*v[2] - 2*v[3]*v[0];
+		q[10] =	1 - 2*v[0]*v[0] - 2*v[1]*v[1];
+		q[15] = 1;
 		return q;
 	}
 }
