@@ -16,6 +16,7 @@ export class dual_frame {
 	#_l2w_iv_m;		#_l2w_iv_bf;
 	#_l2w_ivt_m;	#_l2w_ivt_bf;
 	#_dirty;
+
 	constructor(l2w = m4f.identity()) {
 		this.#_l2w_m     = m4f.zero();
 		this.#_l2w_iv_m  = m4f.zero();

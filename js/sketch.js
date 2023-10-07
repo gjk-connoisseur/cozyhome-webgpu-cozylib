@@ -23,29 +23,50 @@ const sketch = {
 	center_view:(props)=> {
 // reposition the canvases into the center of the document
 		const canvas_wgpu = props.wgpu.ctx.canvas;
-		const canvas_c2d  = props.c2d.ctx.canvas;
 		const center_view = document.getElementById("center_view");
 
-		if(center_view) {
-			center_view.appendChild(canvas_wgpu);
-			canvas_c2d.style.position = 'absolute';
-			center_view.appendChild(canvas_c2d);
+		const popup_window = window.open('', 'Popup',
+			`width=${canvas_wgpu.width},height=${canvas_wgpu.height}`
+		);
+		popup_window.document.write('');
+		popup_window.document.appendChild(canvas_wgpu);
+		props.overwrite_input_window(popup_window);
+		
+		const resize_event=()=> {
+			const device = props.wgpu.device;
+			const format = props.wgpu.format;
+			const queue = device.queue;
+			const ctx = props.wgpu.ctx;
+
+			ctx.canvas.width = popup_window.innerWidth;
+			ctx.canvas.height = popup_window.innerHeight;
+			ctx.configure({ device: device, format: format, usage: GPUTextureUsage.COPY_DST});
+			props.swapchain.resize(props.wgpu.device, ctx.getCurrentTexture());
+			
+			const v0 = props.v0;
+			v0.set_projection(gfx.perspective(ctx.canvas.width, ctx.canvas.height));
+			v0.bind(device, queue);
 		}
+
+		let timeout = {};
+		popup_window.addEventListener('resize', (event)=> {
+			clearTimeout(timeout);
+			timeout = setTimeout(resize_event, 20);
+		});
 	},
 	load: async(self, props)=> {
 		const width = 512; const height = 384;
 // appending a webgpu canvas to the center view tree element.
-		props.wgpu = await props.createWebGPUCanvas(width, height, "WebGPU");
-		props.c2d = await props.create2DCanvas(width, height, "C2D");
-		props.g2d = props.c2d.g2d;
-		props.setFrameRate(120);
+
+		props.wgpu = await props.create_web_gpu_canvas(width, height, "WebGPU");
+		props.set_frame_rate(120);
 
 		const device = props.wgpu.device;
 		const queue = device.queue;
 		const g2d = props.g2d;
 
 		props.v0 = new dual_view(
-			gfx.perspective(g2d.width(), g2d.height()), 
+			gfx.perspective(width, height), 
 			m4f.shift(v4f.vec(5,3,10,1)),
 		);
 		props.v0.bind(device, queue);
@@ -127,11 +148,6 @@ const sketch = {
 		props.swapchain = gfx.createSwapchain(ctx.getCurrentTexture(), device, props.wgpu.format);
 	},
 	pulse:(self, props)=> {
-		const g2d = props.g2d;
-		g2d.refresh();
-		g2d.clear();
-		g2d.aliasing(true);
-
 		const swchain = props.swapchain;
 		const ctx = props.wgpu.ctx;
 
@@ -179,10 +195,9 @@ const sketch = {
 		if(props.keys != null) {
 			const has = (kc)=> props.keys.has(kc);
 			let wish = v4f.vec(0, 0, 0, 0);
+
 			if(has(87)) { wish[2] -= 1; }
-			else if(has(83)) {
-				wish[2] += 1;
-			}
+			else if(has(83)) { wish[2] += 1; }
 			if(has(65)) { wish[0] -= 1; }
 			else if(has(68)) { wish[0] += 1; }
 			

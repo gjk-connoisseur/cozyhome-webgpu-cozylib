@@ -117,6 +117,14 @@ export const gfx = {
 			dep_t:   gfx.createBufferTexture(device, dst_t, "depth24plus"),	// depth texture
 			dst_t: 	 dst_t,													// dest to write into (Next buffer)
 			format:  format,												// texture format
+			resize:  (device, dst_t) => {
+				chain.buf_t = gfx.createBufferTexture(device, dst_t);
+				chain.dep_t = gfx.createBufferTexture(device, dst_t, "depth24plus");
+				chain.dst_t = dst_t;
+
+				chain.setBufferView();
+				chain.setDepthBufferView();
+			},
 			refresh: (next_texture)=> { chain.dst_t = next_texture; },		// run before a flush
 			flush:	 (ctx, encoder)=> { gfx.flush(chain.buf_t, chain.dst_t, encoder); }, // draws to buffer
 			clear:	 (encoder, render, r=0,g=0,b=0,a=1)=> { // clears the screen

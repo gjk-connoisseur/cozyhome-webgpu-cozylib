@@ -64,12 +64,12 @@ const create_pulse=()=> {
 // call this function in order to initiate your state machine sketch
 export const bootstrap_engine= async(self)=> {
 	const props = {};
-	props.setFrameRate=(fps=60)=>{ props.fps = fps; }
-	props.createCanvas=(width=400,height=400,name="")=> {
+	props.set_frame_rate=(fps=60)=>{ props.fps = fps; }
+	props.create_canvas=(width=400,height=400,name="")=> {
 		return create_canvas(width, height, (name == "" || name == null) ? "canvas" : name);
 	}
 // initializes a webgpu context via a device driver
-	props.createWebGPUContext = async (canvas)=> {
+	props.create_web_gpu_context = async (canvas)=> {
 		const on_error = (msg) => { error: true, msg };
 
 		if(!canvas) return on_error("canvas was null.");
@@ -89,7 +89,7 @@ export const bootstrap_engine= async(self)=> {
 		return { error:false, device, ctx, format };
 	}
 
-	props.createCanvas2DContext = async(canvas)=> {
+	props.create_canvas_2d_context = async(canvas)=> {
 		const on_error = (msg) => { error: true, msg };
 		if(!canvas) return on_error("canvas was null.");
 		const ctx = canvas.getContext("2d");
@@ -98,27 +98,39 @@ export const bootstrap_engine= async(self)=> {
 		return { error:false, ctx, g2d };
 	}
 
-	props.createWebGPUCanvas = async(width=400,height=400,name="")=> {
-		const canvas = props.createCanvas(width,height,name);
-		return await props.createWebGPUContext(canvas);
+	props.create_web_gpu_canvas = async(width=400,height=400,name="")=> {
+		const canvas = props.create_canvas(width,height,name);
+		return await props.create_web_gpu_context(canvas);
 	}
 
-	props.create2DCanvas = async(width=400,height=400,name="")=> {
-		const canvas = props.createCanvas(width,height,name);
-		return await props.createCanvas2DContext(canvas);
+	props.create_2d_canvas = async(width=400,height=400,name="")=> {
+		const canvas = props.create_canvas(width,height,name);
+		return await props.create_canvas_2d_context(canvas);
 	}
 
-	props.setFrameRate(60);
-// click operations
-	if(self.on_click) window.addEventListener("click", (event) => self.on_click(props, event));
-	if(self.on_click_down) window.addEventListener("mousedown", (event) => self.on_click_down(props, event));
-	if(self.on_click_up) window.addEventListener("mouseup", (event) => self.on_click_up(props, event));
-	
+	const listeners = {};
+	let active_window = window;
+
+	props.overwrite_input_window=(next_window)=> {
+		Object.keys(listeners).forEach(key => {
+			active_window.removeEventListener(key, listeners[key]);
+			next_window.addEventListener(key, listeners[key]);
+		});
+
+		active_window = next_window;
+	}
+
+	if(self.on_click_down) listeners['mousedown'] = (event) => { self.on_click_down(props, event); }
+	if(self.on_click_up)   listeners['mouseup'] = (event) => { self.on_click_up(props, event); }
+	if(self.on_click) 	   listeners['click'] = (event) => { self.on_click(props, event); }
+
+	if(self.on_key_down)   listeners['keydown'] = (event) => { self.on_key_down(self, props, event); }
+	if(self.on_key_up)     listeners['keyup'] = (event) => { self.on_key_up(self, props, event); }
+	if(self.on_key) 	   listeners['key'] = (event) => { self.on_key(self, props, event); }
+	props.overwrite_input_window(window);
+	props.set_frame_rate(60);
+
 // key operations
-	if(self.on_key) window.addEventListener("key", (event) => self.on_key(self, props, event));
-	if(self.on_key_down) window.addEventListener("keydown", (event) => self.on_key_down(self, props, event));
-	if(self.on_key_up) window.addEventListener("keyup", (event) => self.on_key_up(self, props, event));
-	
 	const begin_sim=()=> {
 		if(self.start) self.start(self, props);
 		if(self.pulse) create_pulse().start(self.pulse, self, props);
