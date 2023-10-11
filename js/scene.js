@@ -64,10 +64,10 @@ export class scene_transitive {
 export class scene_context {
 	#_mesh_registry; // what meshes are stored in this gltf file
 // build a repository of all meshes stored in the gltf file.
-	constructor(data) { 
+	constructor(data) {
 		const registry = new object_list(new uid_handler(), {});
 		for(const mesh_type of data.graph.meshes) {
-			registry.write_obj(()=> new scene_mesh(), {
+			registry.write_obj((args)=> new scene_mesh(args), {
 				name:		mesh_type.name,				// name
 				primitive: 	mesh_type.primitives[0],	// attributes
 				graph: 		data.graph,					// json
@@ -90,10 +90,10 @@ export class scene_context {
 	get_mesh(index) { return this.#_mesh_registry.get_obj(index); }
 }
 
+// constructs the global transformation matrices for all of the nodes in a glTF tree.
 export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
 // build local matrix for this gltf node
 	const build_trs=(root)=> {
-		console.log(root);
 		const t = root.translation;
 		const r = root.rotation;
 		const s = root.scale;
@@ -113,8 +113,6 @@ export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
 // maintain type consistency. m4f is expecting a v4f, not v3f.
 			m = m4f.multiply(m4f.shift(t), m);
 		}
-
-
 		return m; // TRS := Translation * Rotation * Scale
 	}
 
@@ -127,7 +125,6 @@ export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
 		const node_index = scene.nodes[i];
 		const child_node = { 
 			index: node_index,
-//			matrix: m4f.identity()
 			matrix: build_trs(nodes[node_index]),
 		};
 		yoink(child_node, nodes[node_index].mesh);
@@ -164,57 +161,11 @@ export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
 // storage class for raw binary mesh data and its 
 // corresponding buffers inside the GPU.
 export class scene_mesh {
-	#_loaded; #_binded; #_uid; #_name;
-	constructor() {
-		this.#_binded = false;
-		this.#_loaded = false;
-		this.#_name   = "";
-		this.#_uid = 0;
-	}
-// responsible for allocating and storing mesh data to the gpu device.
-	store=(device, queue)=> {
-		if(this.#_loaded) return;
+	#_loaded; #_uid; #_name;
 
-		for(const type in this.attributes) {
-			const attribute = this.attributes[type];
+	constructor (args) {
+		const props = args.props;
 
-			const binary = attribute.binary;		// typed array of attr data
-			const blength = attribute.byteLength;	// amount of bytes total
-			const boffset = attribute.byteOffset;	// how far in binary to read from
-
-// allocate memory for the vertex buffer
-			const vgpu_buffer = device.createBuffer({
-				name: type,
-				size: blength,
-				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-			});
-			queue.writeBuffer(vgpu_buffer, 0, binary, boffset, blength);
-			attribute.buffer = vgpu_buffer;
-		}
-// load the index buffer
-		const attribute = this.INDICES;
-		const binary  = attribute.binary;
-		const blength = attribute.byteLength;
-		const boffset = attribute.byteOffset;
-
-		const igpu_buffer = device.createBuffer({
-			name: "INDICES",
-			size: blength,
-			usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
-		});
-		queue.writeBuffer(igpu_buffer, 0, binary, boffset, blength);
-		attribute.buffer = igpu_buffer;
-
-		this.#_loaded = true;
-	}
-	draw_indexed=(pass)=> {
-		pass.setIndexBuffer(this.INDICES.buffer, "uint16");
-		pass.drawIndexed(~~(this.INDICES.buffer.size / 2));
-	}
-	loaded=()=> { return this.#_loaded; }
-	uid=()=> { return this.#_uid; }
-// ran by the object list implicitly after construction.
-	bind=(props)=> {
 		const primitive = props.primitive;
 		const graph = props.graph;
 		const bins = props.bins;
@@ -260,10 +211,53 @@ export class scene_mesh {
 			this["INDICES"] = indices;
 		}
 
+		this.#_loaded = false;
 		this.attributes = mesh_attr;	// all vertex attributes
 		this.#_name 	= props.name;	// name of mesh
-		this.#_uid 		= props.id;		// universal context mesh id
-		this.#_binded 	= true;			// bound (CPU data ready)
+		this.#_uid 		= args.uid;		// universal context mesh id
 	}
+// responsible for allocating and storing mesh data to the gpu device.
+	store=(device, queue)=> {
+		if(this.#_loaded) return;
+
+		for(const type in this.attributes) {
+			const attribute = this.attributes[type];
+
+			const binary = attribute.binary;		// typed array of attr data
+			const blength = attribute.byteLength;	// amount of bytes total
+			const boffset = attribute.byteOffset;	// how far in binary to read from
+
+// allocate memory for the vertex buffer
+			const vgpu_buffer = device.createBuffer({
+				name: type,
+				size: blength,
+				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+			});
+			queue.writeBuffer(vgpu_buffer, 0, binary, boffset, blength);
+			attribute.buffer = vgpu_buffer;
+		}
+// load the index buffer
+		const attribute = this.INDICES;
+		const binary  = attribute.binary;
+		const blength = attribute.byteLength;
+		const boffset = attribute.byteOffset;
+
+		const igpu_buffer = device.createBuffer({
+			name: "INDICES",
+			size: blength,
+			usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
+		});
+		queue.writeBuffer(igpu_buffer, 0, binary, boffset, blength);
+		attribute.buffer = igpu_buffer;
+
+		this.#_loaded = true;
+	}
+
+	draw_indexed=(pass)=> {
+		pass.setIndexBuffer(this.INDICES.buffer, "uint16");
+		pass.drawIndexed(~~(this.INDICES.buffer.size / 2));
+	}
+	loaded=()=> { return this.#_loaded; }
+	uid=()=> { return this.#_uid; }
 }
 

@@ -7,8 +7,8 @@
 export const state = {
 // fsm := state machine, man := data object, 
 //init := init state, before := function ran before setup(...) and enter(...)
-	init_fse_override:(fsm,man,init,before)=> {
-		if(!man) man = CONSTRUCTOR_MAN();
+	init_fse_override:(fsm, man, init, before)=> {
+		if(!man) man = init_man();
 		const ent = { fsm:fsm, man:man } // get entity
 		before(ent);
 		fsm.setup(man); // invoke all setup functions
@@ -17,7 +17,7 @@ export const state = {
 	},
 // constructs a default finite state entity (base class most configurations should run)
 	init_fse:(fsm, man, init)=> {
-		if(!man) man = CONSTRUCTOR_MAN();
+		if(!man) man = init_man();
 		const ent = { fsm:fsm, man:man } // get entity
 		fsm.setup(man); // invoke all setup functions
 		fsm.set(man, init ? init : 'init'); // run the init state
@@ -95,8 +95,6 @@ export class fsm {
 
 // relies on dependency injection in order to have a simplistic structure. This structure
 // requires passing constructor functions and initialization arguments into the write_obj(...)
-// func. Any object passed into this object MUST have a bind(...) member function. It will
-// take an object in as an argument. Destructure it and take what you need from it.
 // -DC @ 9/24/23
 export class object_list {
 	#_objs; #_uidh;
@@ -108,14 +106,12 @@ export class object_list {
 		this.#_objs.push(nullobj);
 	}
 	write_obj=(ctor, props)=> {
-		const obj = ctor();
 		const next = this.#_uidh.reserve();
+		const obj = ctor({ props, uid:next });
 // if our next index is larger, push. if not, overwrite.
 		if(next >= this.#_objs.length) this.#_objs.push(obj);
 		else this.#_objs[next] = obj;
 // write ID
-		props.id = next;
-		obj.bind(props); // dependency injection
 		return obj;
 	}
 	get_obj=(uid)=> {	

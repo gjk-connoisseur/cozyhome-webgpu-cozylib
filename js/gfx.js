@@ -111,19 +111,19 @@ export const gfx = {
 		height() { return this.ctx.canvas.height; }
 	},
 // returns a swap chain that makes double buffer rendering much simpler to deal with.
-	createSwapchain:(dst_t, device, format)=> {
+	create_swapchain:(dst_t, device, format)=> {
 		const chain = {
-			buf_t:   gfx.createBufferTexture(device, dst_t),				// src texture
-			dep_t:   gfx.createBufferTexture(device, dst_t, "depth24plus"),	// depth texture
-			dst_t: 	 dst_t,													// dest to write into (Next buffer)
-			format:  format,												// texture format
+			buf_t:   gfx.create_buffer_texture(device, dst_t),				  // src texture
+			dep_t:   gfx.create_buffer_texture(device, dst_t, "depth24plus"), // depth texture
+			dst_t: 	 dst_t,													  // dest to write into (Next buffer)
+			format:  format,												  // texture format
 			resize:  (device, dst_t) => {
-				chain.buf_t = gfx.createBufferTexture(device, dst_t);
-				chain.dep_t = gfx.createBufferTexture(device, dst_t, "depth24plus");
+				chain.buf_t = gfx.create_buffer_texture(device, dst_t);
+				chain.dep_t = gfx.create_buffer_texture(device, dst_t, "depth24plus");
 				chain.dst_t = dst_t;
 
-				chain.setBufferView();
-				chain.setDepthBufferView();
+				chain.set_buffer_view();
+				chain.set_depth_buffer_view();
 			},
 			refresh: (next_texture)=> { chain.dst_t = next_texture; },		// run before a flush
 			flush:	 (ctx, encoder)=> { gfx.flush(chain.buf_t, chain.dst_t, encoder); }, // draws to buffer
@@ -131,13 +131,13 @@ export const gfx = {
 // encompasses a singular draw call:
 				const pass = encoder.beginRenderPass({
 					colorAttachments:[{
-						view: chain.getBufferView(),
+						view: chain.get_buffer_view(),
 						clearValue:[r,g,b,a],
 						loadOp:"clear", storeOp:"store"
 					}],
 // enables depth testing via depthStencil in the construction of the render pipeline.
 					depthStencilAttachment: {
-						view: chain.getDepthBufferView(),
+						view: chain.get_depth_buffer_view(),
 						depthClearValue: 1.0,
 						depthLoadOp: "clear",
 						depthStoreOp: "store",
@@ -146,17 +146,18 @@ export const gfx = {
 				render(pass);
 				pass.end();
 			},
-			setBufferView:(descriptor={})=> { chain.b_view = chain.buf_t.createView(descriptor); },
-			getBufferView:()=> chain.b_view,
-			setDepthBufferView:(descriptor={})=> { chain.db_view = chain.dep_t.createView(descriptor); },
-			getDepthBufferView:()=> chain.db_view,
+			set_buffer_view:(descriptor={})=> { chain.b_view = chain.buf_t.createView(descriptor); },
+			get_buffer_view:()=> chain.b_view,
+			set_depth_buffer_view:(descriptor={})=> { chain.db_view = chain.dep_t.createView(descriptor); },
+			get_depth_buffer_view:()=> chain.db_view,
 		};
-		chain.setBufferView();
-		chain.setDepthBufferView();
+
+		chain.set_buffer_view();
+		chain.set_depth_buffer_view();
 		return chain;
 	},
 // nice wrapper for creating textures that depend on others
-	createBufferTexture:(device, src_tex, cformat=null)=> {
+	create_buffer_texture:(device, src_tex, cformat=null)=> {
 		return device.createTexture({
 			size:[src_tex.width, src_tex.height],
 			format: cformat != null ? cformat : src_tex.format,
@@ -172,17 +173,12 @@ export const gfx = {
 		);
 	},
 // generate a perspective projection matrix
-	perspective:(w=1,h=1)=> {
-		const fov = 0.5;
-		const aspect = w/h;
-		return WGPU_PERSPECTIVE_MATRIX(fov, aspect, 0.1, 1000);
+	perspective:(w_aspect=1.77,n=0.1,f=1000,fov=0.5)=> {
+		return WGPU_PERSPECTIVE_MATRIX(fov, w_aspect, n, f);
 	},
 // generate an orthographic projection matrix
-	orthographic:(w=1,h=1,s=1)=> {
-		const aspect = w/h;
-		const near = 0.1;
-		const far = 100;
-		return WGPU_ORTHOGRAPHIC_MATRIX(-s*aspect, +s*aspect, 0.1, 100);	
+	orthographic:(w_aspect,s=1,n=0.1, f=100)=> {
+		return WGPU_ORTHOGRAPHIC_MATRIX(-s*w_aspect, +s*w_aspect, n, f);	
 	},
 	init_ubf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.UNIFORM),
 	init_vbf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.VERTEX),
@@ -203,6 +199,7 @@ export const gfx = {
 
 const WGPU_PERSPECTIVE_MATRIX=(fov, aspect, near, far)=> {
     const f = 1 / Math.tan(fov / 2);
+
     return new Float32Array([
         f/aspect,   0,                        0,        0,
         0,          f,                        0,        0,

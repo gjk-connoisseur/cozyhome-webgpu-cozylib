@@ -157,6 +157,7 @@ export const v4f = {
 		v4f.set(buf,x,y,z,w);
 		return buf;
 	},
+	zero:()=>new Float32Array(4),
 	copy:(a,b)=> { for(let i=0;i<4;i++) b[i] = a[i]; return b; },
 	set:(v,x=0,y=0,z=0,w=0)=> { v[0] = x; v[1] = y; v[2] = z; v[3] = w; },
 	add:(v,w,q = v4f.vec(0,0,0,0))=> { for(let i=0;i<4;i++) q[i] = v[i] + w[i]; return q; },
@@ -189,7 +190,15 @@ export const v4f = {
 		const vw = v4f.dot(v,w);
 		v4f.mul(vw/ww, w, q);
 		return q;
-	}
+	},
+	diff:(a,b,eps=0.0001)=> {
+		let i = 0;
+		for(;i<4;i++) {
+			const dx = a[i] - b[i];
+			if(dx < eps || dx > -eps) break;
+		}
+		return i < 4;
+	},
 }
 
 // matrix 4x4
@@ -197,6 +206,7 @@ export const m4f = {
 	zero:()=>new Float32Array(16),
 	clear:(a)=> { for(let i=0;i<16;i++) a[i] = 0; },
 	copy:(a,b)=> { for(let i=0;i<16;i++) b[i] = a[i]; return b; },
+	col:(m,v=v4f.zero(),i=0)=> { for(let j=0;j<4;j++) v[j] = m[4*i + j]; return v; },
 	diag:(e=v4f.vec(1,1,1,1), q=m4f.zero())=> {
 		const buf = m4f.zero();
 		for(let i=0,j=0;i<16;i+=4,j++) buf[i+j] = e[j];
@@ -344,7 +354,7 @@ export const q4f = {
 		return q;
 	},
 	identity:(e=1)=> {
-		const q = m4f.zero();
+		const q = v4f.zero();
 		q[3] = 1;
 		return q;
 	},
@@ -393,5 +403,13 @@ export const q4f = {
 		q[10] =	1 - 2*v[0]*v[0] - 2*v[1]*v[1];
 		q[15] = 1;
 		return q;
-	}
+	},
+	diff:(a,b,eps=0.0001)=> {
+		let i = 0;
+		for(;i<4;i++) {
+			const dx = a[i] - b[i];
+			if(dx < eps || dx > -eps) break;
+		}
+		return i < 4;
+	},
 }

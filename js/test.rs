@@ -3,11 +3,12 @@
 	"vertex": {
 		"entry":"vmain",
 		"code":"
-		@group(0) @binding(0) var<uniform> prj_m: mat4x4f; // projection matrix
-		@group(0) @binding(1) var<uniform> ivw_m: mat4x4f; // inverse view matrix
+		@tag(view) @group(0) @binding(0) var<uniform> prj_m: mat4x4f; // projection matrix
+		@tag(view) @group(0) @binding(1) var<uniform> ivw_m: mat4x4f; // inverse view matrix
 
-		@group(1) @binding(0) var<uniform> mdl_m: mat4x4f; // model matrix
-		@group(1) @binding(1) var<uniform> itm_m: mat4x4f; // inverse transpose model
+		@tag(object) @group(1) @binding(0) var<uniform> mdl_m: mat4x4f; // model matrix
+		@tag(object) @group(1) @binding(1) var<uniform> itm_m: mat4x4f; // inverse transpose model
+
 // attribute-to-vertex
 		struct a2v {
 // mark glTF vertex attributes with @attribute= tag.

@@ -6,6 +6,8 @@
 // any questions about the implementation or if you notice
 // any errors.
 
+
+
 // returns a list of native bind groups and their bindings:
 // 'native' as in it has not been baked via the device yet. this will 
 // be ran in bind_native_bind_group in the future when it comes time
@@ -22,7 +24,8 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 				name: variable.name, 
 				type: variable.type, 
 				datatype: variable.datatype, 
-				binding: variable.binding
+				binding: variable.binding,
+				tag: variable.tag,
 			});
 		}else {
 			groups.push({
@@ -32,13 +35,14 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 					name: variable.name, 
 					type: variable.type, 
 					datatype: variable.datatype,
-					binding: variable.binding
+					binding: variable.binding,
+					tag: variable.tag
 				}],
 			});
 		}
 	}
 
-// sort groups, eliminate indices
+// sort groups:
 	groups.sort((a,b)=> a.group_index < b.group_index);
 	for(const group of groups) {
 // sort bindings, delete binding indices
@@ -86,6 +90,10 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 
 			const group_lines = lines.filter((el) => el.includes("@group"));
 			const uniforms = group_lines.map((gline)=> {
+// fish for a @tag=
+				const tag_token = gline.match(/@tag\(\w+\)/);
+				const tag = tag_token ? tag_token[0].match(/\w+/g)[1] : -1;
+
 // fish for a @group( number )
 				const group_token = gline.match(/@group\(\d+\)/);
 // fish for a @binding( number ) 
@@ -93,6 +101,7 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 
 				const group = group_token ? ~~group_token[0].match(/\d+/)[0]  : -1;
 				const binding = binding_token ? ~~binding_token[0].match(/\d+/)[0] : -1;
+
 // fish for a var<.... : ...; match var<uniform> name : type;
 				const symbols_token = gline.match(/var<\w+>\s+\w+\w+:\s+\w+/);
 				if(symbols_token != null) {
@@ -104,7 +113,7 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 					const name = tokens[2];
 					const datatype = tokens[3];
 	
-					return { name, datatype, type, group, binding };
+					return { name, datatype, type, group, binding, tag };
 				}
 			});
 
@@ -135,7 +144,8 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 				attribute_map[attr] = { location: loc, type: type };
 			});
 
-			const trimmed = raw.replace(/@attribute=\w+\s/g, "") // remove all attribute tags
+			const trimmed = raw.replace(/@attribute=\w+\s/g, "") // remove all attribute decorators
+				.replace(/@tag\(\w+\)/g, "")					 // remove all tag decorators
 				.replace(/[\n\b\f\n\t]/g, " "); 				 // remove escape chars
 
 // build datatype from type
@@ -205,6 +215,16 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 				fragment: { module: fs_module, entryPoint: wson.fragment.entry, targets: props.targets },
 			});
 
+// simplifies pipeline construction even further in the event you just want a basic, depth-written mesh
+// to be drawn to the screen:
+			const build_basic_pipeline = (dev, format) => {
+				return build_pipeline(dev, {
+					targets: [ { format } ],
+					primitive: { topology:'triangle-list', cullMode: 'back' },
+					depthStencil: { depthWriteEnabled: true, depthCompare: "less", format: "depth24plus" }
+				});
+			}
+
 // bind function that takes the names of the bind group, and matches them
 // to an arguments parameter. this function is responsible for returning an actual
 // device bind group, given a native group.
@@ -217,7 +237,7 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 					}),
 				});
 			}
-			yoink({ wson, native_groups, build_pipeline, bind_native_group, attribute_map });
+			yoink({ wson, native_groups, build_pipeline, build_basic_pipeline, bind_native_group, attribute_map });
 		}
 		fr.readAsText(file);
 	} catch(e) {

@@ -57,7 +57,6 @@ export const io = {
 			img.src = path;
 		}).then((img) => { success(img); iop.dequeue(); }).catch(failure);
 	},
-
 };
 
 // responsible for parsing and returning a valid glTF Javascript object.

@@ -1,0 +1,26 @@
+types of entities:
+	- Renderer
+		* instances a reference to a transform component
+		* instances a reference to a view component
+	- Mesh
+		* instances a reference to a transform component
+		* instances a reference to a material instance
+
+use this to build other components like:
+	- Transform
+		* local to world
+	- View
+		* projection matrix
+		implicitly -> gets reference to 
+		transformation matrix
+	- Material Instance
+		* reference to a w_shader
+		
+
+have a component that analyses the shader after instance
+passes through the shader and identifies characteristics
+(automatically associated the transformation matrix with a gpu buffer)
+
+breadth first traversal to display matrices.
+	-> every object in the scene graph MUST have a transformation matrix
+therefore we don't need to check for it, just simply grab it:
