@@ -6,8 +6,6 @@
 // any questions about the implementation or if you notice
 // any errors.
 
-
-
 // returns a list of native bind groups and their bindings:
 // 'native' as in it has not been baked via the device yet. this will 
 // be ran in bind_native_bind_group in the future when it comes time
@@ -91,8 +89,8 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 			const group_lines = lines.filter((el) => el.includes("@group"));
 			const uniforms = group_lines.map((gline)=> {
 // fish for a @tag=
-				const tag_token = gline.match(/@tag\(\w+\)/);
-				const tag = tag_token ? tag_token[0].match(/\w+/g)[1] : -1;
+				const tag_token = gline.match(/@tag\([\w_]+\)/);
+				const tag = tag_token ? tag_token[0].match(/[\w_]+/g)[1] : -1;
 
 // fish for a @group( number )
 				const group_token = gline.match(/@group\(\d+\)/);
@@ -145,7 +143,7 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 			});
 
 			const trimmed = raw.replace(/@attribute=\w+\s/g, "") // remove all attribute decorators
-				.replace(/@tag\(\w+\)/g, "")					 // remove all tag decorators
+				.replace(/@tag\([\w_]+\)/g, "")					 // remove all tag decorators
 				.replace(/[\n\b\f\n\t]/g, " "); 				 // remove escape chars
 
 // build datatype from type
@@ -225,6 +223,20 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 				});
 			}
 
+// pass in an object prototype that all native uniforms will match to. Useful for tag matching or name-matching.
+// -DC @ 10/11/23
+		const query_native_variable=(match_query)=> {
+// store all query parameters we will be matching in an iterable format:
+			const keys = Object.keys(match_query);
+
+			return native_groups.reduce( // map all native groups to []
+				(result, group) => result.concat( // concatenate [] with all matched variables for this group index.
+					group.entries.filter((variable) => // run the (every) across all criteria provided
+						keys.every((key) => variable[key] == match_query[key])
+					)
+				), [] // -> initial array of matched variables
+			);
+		}
 // bind function that takes the names of the bind group, and matches them
 // to an arguments parameter. this function is responsible for returning an actual
 // device bind group, given a native group.
@@ -237,7 +249,13 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 					}),
 				});
 			}
-			yoink({ wson, native_groups, build_pipeline, build_basic_pipeline, bind_native_group, attribute_map });
+			yoink({ 
+				wson, // JSON representation of our shader
+				native_groups, // variables stored by group category
+				build_pipeline, build_basic_pipeline, // helper functions for instancing pipelines
+				bind_native_group, query_native_variable, // helper functions for binding/querying variables
+				attribute_map // attributes accepted/required for a vertex pointer.
+			});
 		}
 		fr.readAsText(file);
 	} catch(e) {
