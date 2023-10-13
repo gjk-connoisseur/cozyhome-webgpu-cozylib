@@ -147,7 +147,7 @@ const sketch = {
 		const entity_list = new object_list(new uid_handler(), {});
 		const entity = create_mesh_entity(entity_list,
 			props.sc_context.get_mesh(1),
-			props.wshader, device, props.swapchain.format
+			props.wshader, device, queue, props.swapchain.format
 		);
 	},
 	start:async(self, props) => {

@@ -14,6 +14,7 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 	const groups = [];
 	for(const variable of variables) {
 		const var_group_index = variable['group'];
+
 // determine whether or not this group index has already been found:
 		const group_el = groups.find((el)=>el.group_index == var_group_index);
 	
@@ -24,6 +25,7 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 				datatype: variable.datatype, 
 				binding: variable.binding,
 				tag: variable.tag,
+				group: var_group_index,
 			});
 		}else {
 			groups.push({
@@ -34,7 +36,8 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 					type: variable.type, 
 					datatype: variable.datatype,
 					binding: variable.binding,
-					tag: variable.tag
+					tag: variable.tag,
+					group: var_group_index,
 				}],
 			});
 		}
@@ -225,18 +228,31 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 
 // pass in an object prototype that all native uniforms will match to. Useful for tag matching or name-matching.
 // -DC @ 10/11/23
-		const query_native_variable=(match_query)=> {
+			const query_native_variable=(match_query)=> {
 // store all query parameters we will be matching in an iterable format:
-			const keys = Object.keys(match_query);
+				const keys = Object.keys(match_query);
 
-			return native_groups.reduce( // map all native groups to []
-				(result, group) => result.concat( // concatenate [] with all matched variables for this group index.
-					group.entries.filter((variable) => // run the (every) across all criteria provided
-						keys.every((key) => variable[key] == match_query[key])
-					)
-				), [] // -> initial array of matched variables
+				return native_groups.reduce( // map all native groups to []
+					(result, group) => result.concat( // concatenate [] with all matched variables for this group index.
+						group.entries.filter((variable) => // run the (every) across all criteria provided
+							keys.every((key) => variable[key] == match_query[key])
+						)
+					), [] // -> initial array of matched variables
+				);
+			}
+
+			const dependants = [
+// -> concatenate more definitions to this later when they are defined.
+				'local_to_world_matrix',
+				'inverse_transpose_local_to_world_matrix',
+				'perspective_projection_matrix',
+				'inverse_view_matrix'
+				].reduce(
+// match tags to native variables in the event they are present:
+					(result, tag) => result.concat(query_native_variable({tag})), 
+				[] // -> concatenate to this array after every reduction
 			);
-		}
+
 // bind function that takes the names of the bind group, and matches them
 // to an arguments parameter. this function is responsible for returning an actual
 // device bind group, given a native group.
@@ -249,12 +265,14 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 					}),
 				});
 			}
+
 			yoink({ 
 				wson, // JSON representation of our shader
 				native_groups, // variables stored by group category
 				build_pipeline, build_basic_pipeline, // helper functions for instancing pipelines
 				bind_native_group, query_native_variable, // helper functions for binding/querying variables
-				attribute_map // attributes accepted/required for a vertex pointer.
+				attribute_map, // attributes accepted/required for a vertex pointer.
+				dependants,
 			});
 		}
 		fr.readAsText(file);
