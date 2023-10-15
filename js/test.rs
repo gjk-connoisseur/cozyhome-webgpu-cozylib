@@ -1,4 +1,8 @@
 {
+    "bind_groups": {
+        "VIEW_GROUP":"0",
+        "OBJECT_GROUP":"1"
+    },
 	"name":"debug_pnu",
 	"vertex": {
 		"entry":"vmain",

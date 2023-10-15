@@ -32,6 +32,7 @@ export class c_view {
 		this.#_dirty = true;
 		this.#_bake();
 	}
+
 	#_bake() {
 		const fov = this.#_fov_rad;
 		const near = this.#_near_plane;

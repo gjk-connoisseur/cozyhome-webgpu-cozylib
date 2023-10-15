@@ -257,6 +257,7 @@ export class scene_mesh {
 		pass.setIndexBuffer(this.INDICES.buffer, "uint16");
 		pass.drawIndexed(~~(this.INDICES.buffer.size / 2));
 	}
+
 	loaded=()=> { return this.#_loaded; }
 	uid=()=> { return this.#_uid; }
 }

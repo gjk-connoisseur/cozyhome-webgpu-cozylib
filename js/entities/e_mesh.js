@@ -15,6 +15,5 @@ export const create_mesh_entity = (
 	mesh_entity.find_component(c_mesh_instance)
 		.set_mesh(scene_mesh) // notify the entity we are rendering a specific mesh
 		.set_shader(shader, device, queue, format); // notify the entity we are rendering with a specific shader
-
 	return mesh_entity;
 }

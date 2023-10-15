@@ -241,17 +241,16 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 				);
 			}
 
-			const dependants = [
-// -> concatenate more definitions to this later when they are defined.
-				'local_to_world_matrix',
-				'inverse_transpose_local_to_world_matrix',
-				'perspective_projection_matrix',
-				'inverse_view_matrix'
-				].reduce(
-// match tags to native variables in the event they are present:
-					(result, tag) => result.concat(query_native_variable({tag})), 
-				[] // -> concatenate to this array after every reduction
-			);
+// maps from the "bind_groups" array to the index in the shader.
+			const get_native_group_index=(group_type="OBJECT_INDEX") => {
+				const bind_groups = wson.bind_groups;
+				if(bind_groups === undefined) return undefined;
+
+				const group_index = bind_groups[group_type];
+				if(group_index === undefined) return undefined;
+// cast to integer
+				return ~~(group_index);
+			}
 
 // bind function that takes the names of the bind group, and matches them
 // to an arguments parameter. this function is responsible for returning an actual
@@ -272,7 +271,7 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 				build_pipeline, build_basic_pipeline, // helper functions for instancing pipelines
 				bind_native_group, query_native_variable, // helper functions for binding/querying variables
 				attribute_map, // attributes accepted/required for a vertex pointer.
-				dependants,
+				get_native_group_index, // maps string descriptors to object indices
 			});
 		}
 		fr.readAsText(file);

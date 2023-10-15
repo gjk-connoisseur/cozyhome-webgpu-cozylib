@@ -24,3 +24,9 @@ passes through the shader and identifies characteristics
 breadth first traversal to display matrices.
 	-> every object in the scene graph MUST have a transformation matrix
 therefore we don't need to check for it, just simply grab it:
+
+SHADER COMPONENT TAKES FROM SHADER OBJECT AND GENERATES SETTERS FOR ITS ELEMENTS
+
+SHADER COMPONENT INTERFACES WITH CALLBACKS OF COMPONENTES ASSOCIATED WITH GIVEN ENTITY:
+transform -> l2w, it_l2w
+view -> prj, iv
