@@ -12,9 +12,9 @@ import { gfx } from './gfx.js';
 // this object represents a particular
 // verbose transformation matrix -DC @ 10/1/23
 export class dual_frame {
-	#_l2w_m;		#_l2w_bf;
-	#_l2w_iv_m;		#_l2w_iv_bf;
-	#_l2w_ivt_m;	#_l2w_ivt_bf;
+	#_l2w_m;
+	#_l2w_iv_m;
+	#_l2w_ivt_m;
 	#_dirty;
 
 	constructor(l2w = m4f.identity()) {
@@ -33,22 +33,10 @@ export class dual_frame {
 		m4f.inverse(l2w, this.#_l2w_iv_m); // inverse
 		m4f.transpose(this.#_l2w_iv_m, this.#_l2w_ivt_m); // inverse transpose
 	}
-	bind=(device, queue)=> {
-		if(this.#_dirty) {
-			if(this.#_l2w_bf != null) {
-				gfx.write_gbf(queue, this.#_l2w_bf, 	this.#_l2w_m);
-				gfx.write_gbf(queue, this.#_l2w_iv_bf, 	this.#_l2w_iv_m);
-				gfx.write_gbf(queue, this.#_l2w_ivt_bf, this.#_l2w_ivt_m);
-			}else {
-				this.#_l2w_bf 	  = gfx.init_ubf(device, queue, this.#_l2w_m,     'l2w_bf');
-				this.#_l2w_iv_bf  = gfx.init_ubf(device, queue, this.#_l2w_iv_m,  'l2w_iv_bf');
-				this.#_l2w_ivt_bf = gfx.init_ubf(device, queue, this.#_l2w_ivt_m, 'l2w_ivt_bf');
-			}
-			this.#_dirty = false;
-		}
-	}
-// call this if you want to create a bind group with these elements
-	group=()=> { return { mdl_m: this.#_l2w_bf, itm_m: this.#_l2w_ivt_bf }; }
+
+	l2w=()=> { return this.#_l2w_m; }
+	l2w_iv=()=> { return this.#_l2w_iv_m; }
+	l2w_ivt=()=> { return this.#_l2w_ivt_m; }
 }
 
 // stores coordinate frame information for a camera data object. No state. Purely data.

@@ -54,7 +54,6 @@ export class c_mesh_instance {
 				const object_gpu_group = shader.bind_native_group(
 					device, object_group, this.#_uniforms
 				);
-
 				this.#_bindgroups.push({ index: object_group, group: object_gpu_group });
 // create a local function that searches the native group by TAG, and determines which uniforms
 // should be set. -DC @ 10/14/23
@@ -81,7 +80,8 @@ export class c_mesh_instance {
 // assign all of the bind groups associated with this mesh object.
 	match_bind_groups (pass) {
 		for(const bgroup of this.#_bindgroups) {
-			pass.setBindGroup(bgroup.index, bgroup.group);
+			const index = bgroup.index;
+			pass.setBindGroup(index.group_index, bgroup.group);
 		}
 	}
 // most blank possible way of drawing a mesh.
@@ -91,7 +91,6 @@ export class c_mesh_instance {
 			 this.#_pipeline && 
 			 this.#_bindgroups &&
 			 this.#_shader)) return;
-
 // render pass consists of context switching:
 		pass.setPipeline(this.#_pipeline);
 		this.match_vertex_buffer(pass);

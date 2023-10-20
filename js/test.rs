@@ -51,7 +51,9 @@
 
 		@fragment fn fmain (o: v2f) -> @location(0) vec4f {
 			let ndl = saturate(dot(o.nor, vec3(0,0,1)));
-			return vec4(o.uv.x * ndl, 0.25 + ndl, o.uv.y * ndl, 1);
+//         return vec4(ndl,ndl,ndl,1);
+//			return vec4(o.uv.x * ndl,0.1 + ndl, o.uv.y * ndl, 1);
+			return vec4(.25 + o.uv.x/2, .25 + o.uv.y/2, 0.5, 1);
 		}"
 	}
 }

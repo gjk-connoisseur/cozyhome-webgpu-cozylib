@@ -173,7 +173,7 @@ export const gfx = {
 		);
 	},
 // generate a perspective projection matrix
-	perspective:(w_aspect=1.77,n=0.1,f=1000,fov=0.5)=> {
+	perspective:(w_aspect=1.77,n=0.1,f=1000,fov=1.0)=> {
 		return WGPU_PERSPECTIVE_MATRIX(fov, w_aspect, n, f);
 	},
 // generate an orthographic projection matrix

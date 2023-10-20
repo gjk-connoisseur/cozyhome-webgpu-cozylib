@@ -108,7 +108,6 @@ export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
 			m = m4f.multiply(q4f.to_m4f(r), m);
 		}
 		if(t != undefined) { 
-			//t[2] *= -1;
 			t.push(1);
 // maintain type consistency. m4f is expecting a v4f, not v3f.
 			m = m4f.multiply(m4f.shift(t), m);
