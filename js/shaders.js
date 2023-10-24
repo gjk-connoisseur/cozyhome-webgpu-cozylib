@@ -17,7 +17,7 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 
 // determine whether or not this group index has already been found:
 		const group_el = groups.find((el)=>el.group_index == var_group_index);
-	
+
 		if(group_el != null) {
 			group_el.entries.push({ 
 				name: variable.name, 
@@ -65,9 +65,17 @@ const compile_native_bind_groups=(device, wson, variables)=> {
 			mask = wson.fragment.code.includes(datatype) ? GPUShaderStage.FRAGMENT | mask : mask;
 
 // for later: determine the resource type
-			const resource_type=(type)=> { return { buffer: {} }; }
+			const resource_type=(type)=> { 
+				if(type.includes("mat4x4f")) {
+					return { buffer: {} }; 
+				}else if(type.includes("texture_2d")) {
+					return { texture: {} };
+				}else if(type.includes("sampler")) {
+					return { sampler: {} };
+				}
+			}
 
-			return { binding: index, visibility : mask, ...resource_type() };
+			return { binding: index, visibility : mask, ...resource_type(datatype) };
 		});
 		group.layout = device.createBindGroupLayout(native_layout);
 	}
@@ -104,16 +112,23 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 				const binding = binding_token ? ~~binding_token[0].match(/\d+/)[0] : -1;
 
 // fish for a var<.... : ...; match var<uniform> name : type;
-				const symbols_token = gline.match(/var<\w+>\s+\w+\w+:\s+\w+/);
+//				const symbols_token = gline.match(/var[<]*\w+[>]*\s+\w+\w+:\s+\w+/);
+				const symbols_token = gline.match(/var[\s\w:<>]*/);
+
+// refactor the symbols tokenizer to account for both types.
+// @tag(inverse_transpose_local_to_world_matrix) @group(1) @binding(1) var<uniform> itm_m: mat4x4f;
+// @tag(albedo_texture) @group(1) @binding(2) var t_albedo : texture_2d<f32>;
+
 				if(symbols_token != null) {
-					const tokens = symbols_token[0].match(/\w+/g);
+					const tokens = symbols_token[0].match(/[\w<>]+/g);
+					
 // invalid variable declaration: skip 
 					if(tokens == null || tokens.length < 2) return;
 
-					const type = tokens[1];
-					const name = tokens[2];
-					const datatype = tokens[3];
-	
+					const type = tokens[0];
+					const name = tokens[1];
+					const datatype = tokens[2];
+
 					return { name, datatype, type, group, binding, tag };
 				}
 			});
@@ -260,7 +275,13 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 					label:`${native_group.label}_device`,
 					layout: native_group.layout,
 					entries: native_group.entries.map((el, index) => {
-						return { binding: index, resource: { buffer: props[el.name] } }
+						if(el.datatype.includes("mat4x4f")) {
+							return { binding: index, resource: { buffer: props[el.name] } };
+						}else if(el.datatype.includes("texture_2d")) {
+							return { binding: index, resource: props[el.name].createView() };
+						}else if(el.datatype.includes("sampler")) {
+							return { binding: index, resource: props[el.name] };
+						}
 					}),
 				});
 			}

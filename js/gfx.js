@@ -180,6 +180,26 @@ export const gfx = {
 	orthographic:(w_aspect,s=1,n=0.1, f=100)=> {
 		return WGPU_ORTHOGRAPHIC_MATRIX(-s*w_aspect, +s*w_aspect, n, f);	
 	},
+	upload_bitmap:(device, queue, bitmap)=> {
+		const width = bitmap.width, height = bitmap.height;
+		
+		const tex_descriptor = {
+			size: { width, height },
+			format: 'rgba8unorm',
+			usage: GPUTextureUsage.TEXTURE_BINDING | 
+				   GPUTextureUsage.COPY_DST | 
+				   GPUTextureUsage.RENDER_ATTACHMENT,
+		};
+
+		const tex_handler = device.createTexture(tex_descriptor);
+
+		queue.copyExternalImageToTexture(
+			{ source: bitmap }, { texture: tex_handler },
+			tex_descriptor.size
+		);
+
+		return { tex_handler, tex_descriptor };
+	},
 	init_ubf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.UNIFORM),
 	init_vbf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.VERTEX),
 	init_ibf:(device, queue, buf, name)=> gfx.init_gbf(device, queue, buf, name, GPUBufferUsage.INDEX),

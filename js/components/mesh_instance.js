@@ -9,11 +9,11 @@ export class c_mesh_instance {
 	#_pipeline;   // what render pipeline will we be using?
 	#_mesh;       // scene_mesh we are rendering with
 	#_uniforms;   // elements of the 'entries' native group.
-	#_bindgroups; // actual gpu bind groups.
+	#_bindgroup; // actual gpu bind groups.
 
 	constructor(entity) {
 		this.#_entity = entity;
-		this.#_bindgroups = [];
+		this.#_bindgroup = null;
 
 		this.#_mesh = null;
 		this.#_shader = null;
@@ -39,7 +39,7 @@ export class c_mesh_instance {
 // map elements to their GPU counterparts:
 				object_group.entries.forEach((entry) => {
 // mat4x4f support is most important here.
-					if(entry.datatype == 'mat4x4f') {
+					if(entry.datatype.includes("mat4x4f")) {
 						this.#_uniforms[entry.name] =
 						gfx.init_ubf(device, queue, m4f.identity(), 
 							`${shader.wson.name}_${this.#_entity.uid()}_${entry.name}`
@@ -48,18 +48,39 @@ export class c_mesh_instance {
 						this[`set_${entry.tag}`] = (queue, m4f) => {
 							gfx.write_gbf(queue, this.#_uniforms[entry.name], m4f);
 						}
+					}else if(entry.datatype.includes("texture_2d")) {
+						this[`set_${entry.tag}`] = (queue, tex) => {
+							this.#_uniforms[entry.name] = tex;
+						}
+					}else if(entry.datatype.includes("sampler")) {
+						this[`set_${entry.tag}`] = (queue, sampler) => {
+							this.#_uniforms[entry.name] = sampler;
+						}
 					}
 				});
-
-				const object_gpu_group = shader.bind_native_group(
-					device, object_group, this.#_uniforms
-				);
-				this.#_bindgroups.push({ index: object_group, group: object_gpu_group });
 // create a local function that searches the native group by TAG, and determines which uniforms
 // should be set. -DC @ 10/14/23
 			}
 		}
 		return this;
+	}
+// required to be executed before the first draw instruction is made.
+// -DC @ 10/22/23
+	bake_uniforms (device) {
+		const shader = this.#_shader;
+		const uniforms = this.#_uniforms;
+
+		const object_index = shader.get_native_group_index("OBJECT_GROUP");
+		if(object_index === undefined) return;
+
+		const object_group = shader.native_groups[object_index];
+		if(object_group === undefined) return;
+
+		const object_gpu_group = shader.bind_native_group(
+			device, object_group, uniforms
+		);
+
+		this.#_bindgroup = { index: object_group, group: object_gpu_group };
 	}
 // set the vertex buffer attributes for a draw call.
 	match_vertex_buffer (pass) {
@@ -79,17 +100,16 @@ export class c_mesh_instance {
 	}
 // assign all of the bind groups associated with this mesh object.
 	match_bind_groups (pass) {
-		for(const bgroup of this.#_bindgroups) {
-			const index = bgroup.index;
-			pass.setBindGroup(index.group_index, bgroup.group);
-		}
+		const group_bundle = this.#_bindgroup;
+		const native = group_bundle.index;
+		pass.setBindGroup(native.group_index, group_bundle.group);
 	}
 // most blank possible way of drawing a mesh.
 	draw (pass) {
 // not really necessary but will prevent exceptions.
 		if(!(this.#_mesh && 
 			 this.#_pipeline && 
-			 this.#_bindgroups &&
+			 this.#_bindgroup &&
 			 this.#_shader)) return;
 // render pass consists of context switching:
 		pass.setPipeline(this.#_pipeline);

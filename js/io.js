@@ -22,7 +22,7 @@ const iop = {
 		iop.dependants--;
 		if(iop.dependants == 0) { 
 			iop.listener();
-			waiting = false;
+			iop.waiting = false;
 		}
 	},
 };
