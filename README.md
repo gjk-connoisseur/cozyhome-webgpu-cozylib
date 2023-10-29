@@ -5,5 +5,5 @@ to interpret and visualize an 'arbitrary' collection of geometric primitives, mo
 engine AS IS. 
 
 <p align="center">
-  <img src="webgpu.gif" alt="Engine Gif"/>
+  <img src="chest.gif" alt="Engine Gif"/>
 </p>
