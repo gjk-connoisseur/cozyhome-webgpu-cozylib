@@ -6,6 +6,9 @@
 // any questions about the implementation or if you notice
 // any errors.
 
+import { io } from './io.js';
+
+import { gfx } from './gfx.js';
 import { m4f, v4f, q4f } from './algebra.js';
 import { uid_handler, object_list } from './state.js';
 import { object_queue } from './state.js';
@@ -63,27 +66,78 @@ export class scene_transitive {
 // mesh data will be accessed, loaded, and kept.
 export class scene_context {
 	#_mesh_registry; // what meshes are stored in this gltf file
+	#_image_registry; // what images are stored in this gltf file
+	#_tex_registry;
 // build a repository of all meshes stored in the gltf file.
-	constructor(data) {
-		const registry = new object_list(new uid_handler(), {});
-		for(const mesh_type of data.graph.meshes) {
-			registry.write_obj((args)=> new scene_mesh(args), {
+	constructor(device, queue, data) {
+		console.log(data);
+		const mesh_graph = data.graph.meshes;
+// build a repository of meshes
+		const mesh_registry = new object_list(new uid_handler(), {});
+		this.#_mesh_registry = mesh_registry;
+
+		let mesh_count = mesh_graph.length+1;
+		const on_mesh_loaded=()=> {
+			mesh_count--;
+			if(mesh_count == 0) {
+				this.store_all_meshes(device, queue);
+			}
+		}
+
+		for(const mesh_type of mesh_graph) {
+			mesh_registry.write_obj((args)=> new scene_mesh(args), {
 				name:		mesh_type.name,				// name
 				primitive: 	mesh_type.primitives[0],	// attributes
 				graph: 		data.graph,					// json
-				bins:  		data.bins					// binary
+				bins:  		data.bins,					// binary
+				on_loaded: on_mesh_loaded
 			});
+		} on_mesh_loaded();
+
+// dependency injection to upload images to WebGPU textures.
+		const image_graph = data.graph.images;
+
+		let image_count = image_graph.length+1;
+		const on_image_loaded=()=> {
+			image_count--;
+			if(image_count == 0) {
+				this.store_all_images(device, queue);
+			}
 		}
-		this.#_mesh_registry = registry;
+
+// build a repository of images
+		const image_registry = new object_list(new uid_handler(), {});
+		this.#_image_registry = image_registry;
+
+		for(const image_type of image_graph) {
+			image_registry.write_obj((args) => new scene_image(args), {
+				name:	image_type.name,
+				mime_type: image_type.mimeType,
+				buffer_view_index: image_type.bufferView,
+				graph: 	data.graph,
+				bins: 	data.bins,
+				on_loaded: on_image_loaded
+			});
+		} on_image_loaded();
 	}
 // load the vertex and element buffers into VRAM
-	store_all(device, queue) {
+	store_all_meshes(device, queue) {
 		const registry = this.#_mesh_registry;
-
 		for(let i=1;i < registry.length();i++) {
 			const mesh_obj = registry.get_obj(i);
 			if(mesh_obj != null) {
 				mesh_obj.store(device, queue);
+			}
+		}
+	}
+// load the texture information into VRAM
+	store_all_images(device, queue) {
+		const registry = this.#_image_registry;
+
+		for(let i=1;i < registry.length();i++) {
+			const image_obj = registry.get_obj(i);
+			if(image_obj != null) {
+				image_obj.store(device, queue);
 			}
 		}
 	}
@@ -157,6 +211,61 @@ export const compute_scene_hierarchy=(data, scene, yoink=(node, mesh)=>{})=> {
 	}
 }
 
+// a data storage class that helps convert glb-images to
+// webgpu textures -DC @ 10/26/23
+export class scene_image {
+	#_bitmap; #_texture;
+	#_loaded; #_uid; #_name;
+
+	constructor(args) {
+		const props = args.props;
+
+		const graph = props.graph;
+		const bins = props.bins;
+
+// grab access to the list of various buffer views
+		const buffer_views = graph.bufferViews;
+
+// the storage description of this image: { binary index, length, offset } 
+		const image_view = buffer_views[props.buffer_view_index];
+		const image_blob = new Blob([new DataView(
+				bins[image_view.buffer],
+				image_view.byteOffset, image_view.byteLength
+			)], { type: props.mime_type }
+		);
+
+		io.load_image(
+// convert from a blob type to whichever mime type was described
+			URL.createObjectURL(image_blob),
+			(image) => {
+				createImageBitmap(image)
+				.then((bitmap) => {
+					this.#_bitmap = bitmap;
+// notify callee we are finished loading our data. -DC @ 10/23/23
+					if(props.on_loaded != null) {
+						props.on_loaded();
+					}
+			});
+		});
+
+		this.#_loaded = false; // whether loaded on GPU or not
+		this.#_uid = args.uid; // id in the array
+	}
+
+	store(device, queue) {
+		if(this.#_loaded) return;
+		if(this.#_bitmap == null) {
+			console.log(`warning: bitmap not loaded for ${this}`);
+			return;
+		}
+
+		this.#_texture = gfx.upload_bitmap(device, queue, this.#_bitmap);
+	}
+
+	loaded() { return this.#_loaded; }
+	uid() { return this.#_uid; }
+}
+
 // storage class for raw binary mesh data and its 
 // corresponding buffers inside the GPU.
 export class scene_mesh {
@@ -210,13 +319,18 @@ export class scene_mesh {
 			this["INDICES"] = indices;
 		}
 
-		this.#_loaded = false;
-		this.attributes = mesh_attr;	// all vertex attributes
-		this.#_name 	= props.name;	// name of mesh
-		this.#_uid 		= args.uid;		// universal context mesh id
+		this.#_uid = args.uid; // universal context mesh id
+		this.#_name = props.name; // name of mesh
+		this.#_loaded = false; // whether loaded on GPU or not
+		this.attributes = mesh_attr; // all vertex attributes
+
+// run mesh loaded callback after everything is set -DC @ 10/27/23
+		if(props.on_loaded != null) {
+			props.on_loaded();
+		}
 	}
 // responsible for allocating and storing mesh data to the gpu device.
-	store=(device, queue)=> {
+	store(device, queue) {
 		if(this.#_loaded) return;
 
 		for(const type in this.attributes) {
@@ -252,12 +366,12 @@ export class scene_mesh {
 		this.#_loaded = true;
 	}
 
-	draw_indexed=(pass)=> {
+	draw_indexed(pass) {
 		pass.setIndexBuffer(this.INDICES.buffer, "uint16");
 		pass.drawIndexed(~~(this.INDICES.buffer.size / 2));
 	}
 
-	loaded=()=> { return this.#_loaded; }
-	uid=()=> { return this.#_uid; }
+	loaded() { return this.#_loaded; }
+	uid() { return this.#_uid; }
 }
 

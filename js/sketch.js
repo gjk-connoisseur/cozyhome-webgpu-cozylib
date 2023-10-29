@@ -142,8 +142,7 @@ const sketch = {
 		const queue = device.queue;
 		const wshader = props.wshader;
 	
-		props.sc_context = new scene_context(data);
-		props.sc_context.store_all(device, queue);
+		props.sc_context = new scene_context(device, queue, data);
 
 		props.ent_list = new object_list(new uid_handler(), {});
 // construct a frame for each model in the hierarchy
@@ -166,18 +165,10 @@ const sketch = {
 			const set_tex = mesh_c.set_albedo_texture;
 			const set_sampler = mesh_c.set_albedo_sampler;
 
-			if(set_l2w != null) { 
-				set_l2w(queue, frame.l2w());
-			}
-			if(set_ivt != null) {
-				set_ivt(queue, frame.l2w_ivt());
-			}
-			if(set_tex != null) { 
-				set_tex(queue, props.stone_tex.tex_handler);
-			}
-			if(set_sampler != null) {
-				set_sampler(queue, props.sampler);
-			}
+			if(set_l2w != null) { set_l2w(queue, frame.l2w()); }
+			if(set_ivt != null) { set_ivt(queue, frame.l2w_ivt()); }
+			if(set_tex != null) { set_tex(queue, props.stone_tex.tex_handler); }
+			if(set_sampler != null) { set_sampler(queue, props.sampler); }
 // tell the mesh we are ready to bind our native groups 
 // to the remote device. -DC@ 10/22/23.
 			mesh_c.bake_uniforms(device);
@@ -228,10 +219,10 @@ const sketch = {
 		swchain.clear(encoder, (pass) => {
 			pass.setBindGroup(0, props.group0);
 			for(let i=1;i < ent_list.length();i++) {
-				const ent = ent_list.get_obj(i);
-				if(ent == null) continue;
+				const ent_renderer = ent_list.get_obj(i);
+				if(ent_renderer == null) continue;
 
-				const mesh_c = ent.find_component(c_mesh_instance);
+				const mesh_c = ent_renderer.find_component(c_mesh_instance);
 				if(mesh_c == null) continue;
 
 				mesh_c.draw(pass);
