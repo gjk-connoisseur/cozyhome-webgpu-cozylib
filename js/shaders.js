@@ -162,7 +162,7 @@ export const parse_wshader=(device, file, yoink=()=>{})=> {
 
 			const trimmed = raw.replace(/@attribute=\w+\s/g, "") // remove all attribute decorators
 				.replace(/@tag\([\w_]+\)/g, "")					 // remove all tag decorators
-				.replace(/[\n\b\f\n\t]/g, " "); 				 // remove escape chars
+				.replace(/[\r\n\b\f\n\t]/g, " "); 				 // remove escape chars
 
 // build datatype from type
 			const attr_format = (attr) => {
