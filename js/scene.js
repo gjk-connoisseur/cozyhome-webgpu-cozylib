@@ -13,6 +13,78 @@ import { m4f, v4f, q4f } from './algebra.js';
 import { uid_handler, object_list } from './state.js';
 import { object_queue } from './state.js';
 
+export class scene_gltf {
+	#_images;
+
+	constructor(device, queue, gltf) {
+// start of the pipeline is a promise that constructs image bitmaps
+// from the underlying binary data stored in .gltf. -DC @ 10/31/23
+// it is currently 2:03 AM :).
+		this.build_image_index(gltf)
+			.then(this.build_sampler_index(gltf));
+	}
+
+//  *  (Import Samplers) 2. index all samplers into native samplers //
+	build_sampler_index(gltf) {
+		console.log(gltf);
+	}
+	
+// * (Import Bitmaps) 1. index all images into bitmaps/native textures * //
+// responsible for uploading image data of our .gltf file into VRAM.
+	build_image_index(gltf) {
+		const graph = gltf['graph'];
+		const bins = gltf['bins'];
+
+		const gltf_images = graph['images'];
+		const gltf_views = graph['bufferViews'];
+
+		return new Promise((resolve) => {
+			let mapped_gltf_images = 0;
+			const count_gltf_image = () => {
+				mapped_gltf_images++;
+// all of our image descriptors now map to bitmaps on the CPU. By including
+// a +1, we ensure that the interpreter has appended all elements to the
+// images property of this object.
+				if(mapped_gltf_images >= this.#_images.length) {
+					resolve(graph, bins);
+				}
+			}
+// map the cardinality to our images index
+			this.#_images = gltf_images.map((gltf_image, gltf_index) => {
+				const buffer_view = gltf_image['bufferView'];
+				const mime_type = gltf_image['mimeType'];
+				const name = gltf_image['name'];
+
+// determine where our image data is in our binary soup:
+				const image_view = gltf_views[buffer_view];
+
+// build a binary blob out of it:
+				const image_blob = new Blob([
+					new DataView(
+// image_view's buffer attribute maps to which binary chunk our image is in
+						bins[image_view.buffer],
+// specify run-length of our image data
+						image_view.byteOffset, image_view.byteLength
+					)], 
+// what should our binary blob imitate:
+					{ type: mime_type }
+				);
+// actually deserialize the compressed image (usually .PNG) and load into CPU memory.
+				io.load_image(URL.createObjectURL(image_blob), (image) => {
+// I hate the .then() syntax but it works so who really gives a shit.
+					createImageBitmap(image)
+					.then((gltf_bitmap) => {
+						this.#_images[gltf_index] = gltf_bitmap;
+						count_gltf_image();
+					});
+				});
+			});
+// notify counter that we have reached the end of this local function
+			count_gltf_image();
+		});
+	}
+}
+
 // human friendly/glTF friendly format for representing transformation matrices:
 export class scene_transitive {
 	#_shift; #_twist; #_scale;
@@ -231,8 +303,6 @@ export class scene_texture {
 	
 		const sampler_index = props.sampler_index;
 		const source_index = props.source_index;
-
-
 
 		this.#_uid = args.uid;
 	}

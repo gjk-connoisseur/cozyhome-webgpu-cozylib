@@ -10,7 +10,7 @@ import { v3f, v4f, q4f, m4f, m3f } from './algebra.js';	// geometric algebras
 import { io, gltf_reader } from './io.js'; // importing/exporting, etc.
 
 import { gfx } from './gfx.js';	// general graphics purposes
-import { scene_transitive, scene_context, compute_scene_hierarchy } from './scene.js'; // scene manager
+import { scene_transitive, scene_gltf, scene_context, compute_scene_hierarchy } from './scene.js'; // scene manager
 import { parse_wshader } from './shaders.js'; // wshader parser
 
 import { object_list, uid_handler } from './state.js';
@@ -142,6 +142,8 @@ const sketch = {
 		const queue = device.queue;
 		const wshader = props.wshader;
 	
+		props.sc_gltf = new scene_gltf(device, queue, data);
+
 		props.sc_context = new scene_context(device, queue, data);
 
 		props.ent_list = new object_list(new uid_handler(), {});
