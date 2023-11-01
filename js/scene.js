@@ -13,24 +13,109 @@ import { m4f, v4f, q4f } from './algebra.js';
 import { uid_handler, object_list } from './state.js';
 import { object_queue } from './state.js';
 
-export class scene_gltf {
+// scene from the viewport of the CPU.
+export class native_scene_gltf {
+	#_textures;
+	#_samplers;
 	#_images;
 
 	constructor(device, queue, gltf) {
 // start of the pipeline is a promise that constructs image bitmaps
 // from the underlying binary data stored in .gltf. -DC @ 10/31/23
 // it is currently 2:03 AM :).
-		this.build_image_index(gltf)
-			.then(this.build_sampler_index(gltf));
+		this.build_image_index(gltf) // loads images into bitmaps
+// passing build stages into higher order lambdas fixes scope issues. -DC @ 11/1/23
+			.then(() => { this.build_sampler_index(gltf); })  // constructs NativeSamplers
+			.then(() => { this.build_texture_index(gltf); })  // constructs NativeTexture
+			.then(() => { this.build_mesh_index(gltf); });
+	}
+
+// * (Import Meshes) 4. index all meshes into NativeMeshes for import onto the GPU later. //
+// TODO: -DC @ 11/1/23
+	build_mesh_index(gltf) {
+
+	}
+
+// * (Construct NativeTextures) 3. construct a list of native textures via the prior two lists. //
+	build_texture_index(gltf) {
+		const graph = gltf['graph'];
+
+		const gltf_textures = graph['textures'];
+
+		return new Promise((resolve) => {
+			this.#_textures = gltf_textures.map(() => undefined);
+			gltf_textures.forEach((gltf_texture, gltf_index) => {
+
+				const image_source_index = gltf_texture['source'];
+				const sampler_source_index = gltf_texture['sampler'];
+
+				const bitmap = this.#_images[image_source_index].source;
+				const sampler = this.#_samplers[sampler_source_index];
+
+				const size = [ bitmap.width, bitmap.height ];
+				const format = 'rgba8unorm';
+				const usage = GPUTextureUsage.RENDER_ATTACHMENT |
+						GPUTextureUsage.TEXTURE_BINDING |
+						GPUTextureUsage.COPY_DST;
+
+				this.#_textures[gltf_index] = {
+					descriptor: { size, format, usage },
+					resource: { bitmap },
+					sampler_descriptor: sampler 
+				};
+			});
+// notify promise closure we are complete for this build step.
+			resolve();
+		});
 	}
 
 //  *  (Import Samplers) 2. index all samplers into native samplers //
 	build_sampler_index(gltf) {
-		console.log(gltf);
+		const graph = gltf['graph'];
+		const gltf_samplers = graph['samplers'];
+
+// maps minFilters in .glTF format to WGPU format
+		const mag_texel_filter = {
+			_undefined: 'nearest', // default
+			_9728: 'nearest', 
+			_9729: 'linear'
+		};
+
+// maps minFilters in .glTF format to WGPU format
+		const min_texel_filters = {
+			_undefined: {minFilter:'nearest', mipmapFilter:'nearest'}, 	// default
+			_9984:{minFilter:'nearest', mipmapFilter:'nearest'}, 		// nearest mipmap nearest
+			_9985:{minFilter:'linear',  mipmapFilter:'nearest'},	 	// linear mipmap nearest
+			_9986:{minFilter:'nearest', mipmapFilter:'linear'}, 		// nearest mipmap linear
+			_9987:{minFilter:'linear',  mipmapFilter:'linear'} 			// linear mipmap linear
+		};
+
+		const wrap_mode = {
+			_undefined: 'clamp-to-edge',
+			_33071: 'clamp-to-edge',
+			_10497: 'repeat',
+			_33648: 'mirror-repeat'
+		};
+
+		return new Promise((resolve) => {
+			this.#_samplers = gltf_samplers.map(() => undefined);
+			gltf_samplers.forEach((gltf_sampler, gltf_index) => {
+				const magFilter = mag_texel_filter[`_${gltf_sampler['magFilter']}`];
+				const min_filters = min_texel_filters[`_${gltf_sampler['minFilter']}`];
+				
+				const addressModeU = wrap_mode[`_${gltf_sampler['wrapS']}`];
+				const addressModeV = wrap_mode[`_${gltf_sampler['wrapT']}`];
+// map to a NativeSampler
+				this.#_samplers[gltf_index] = {
+					magFilter, ...min_filters, addressModeU, addressModeV
+				};
+			});
+// end here. No concurrency or waiting required for this step.
+			resolve();
+		});
 	}
 	
-// * (Import Bitmaps) 1. index all images into bitmaps/native textures * //
-// responsible for uploading image data of our .gltf file into VRAM.
+// * (Import Bitmaps) 1. index all images into bitmaps * //
 	build_image_index(gltf) {
 		const graph = gltf['graph'];
 		const bins = gltf['bins'];
@@ -45,12 +130,13 @@ export class scene_gltf {
 // all of our image descriptors now map to bitmaps on the CPU. By including
 // a +1, we ensure that the interpreter has appended all elements to the
 // images property of this object.
-				if(mapped_gltf_images >= this.#_images.length) {
-					resolve(graph, bins);
+				if(mapped_gltf_images >= this.#_images.length+1) {
+					resolve();
 				}
 			}
 // map the cardinality to our images index
-			this.#_images = gltf_images.map((gltf_image, gltf_index) => {
+			this.#_images = gltf_images.map(()=>undefined);
+			gltf_images.forEach((gltf_image, gltf_index) => {
 				const buffer_view = gltf_image['bufferView'];
 				const mime_type = gltf_image['mimeType'];
 				const name = gltf_image['name'];
@@ -74,7 +160,7 @@ export class scene_gltf {
 // I hate the .then() syntax but it works so who really gives a shit.
 					createImageBitmap(image)
 					.then((gltf_bitmap) => {
-						this.#_images[gltf_index] = gltf_bitmap;
+						this.#_images[gltf_index] = { source: gltf_bitmap };
 						count_gltf_image();
 					});
 				});
@@ -85,62 +171,12 @@ export class scene_gltf {
 	}
 }
 
-// human friendly/glTF friendly format for representing transformation matrices:
-export class scene_transitive {
-	#_shift; #_twist; #_scale;
-	#_matrix;
-	#_dframe;
-
-	constructor(dframe = null,
-			shift = v4f.vec(0,0,0,1),
-			twist = q4f.identity(),
-			scale = v4f.vec(1,1,1,1)) {
-		this.#_shift = shift;
-		this.#_twist = twist;
-		this.#_scale = scale;
-		this.#_dframe = dframe;
-
-		this.apply();
-	}
-// updates + returns the matrix configuration for shift, twist, scale
-	apply=(device=null, queue=null)=> {
-		this.#_matrix = m4f.stack(
-			m4f.shift(this.#_shift), 	// v4f -> m4f
-			q4f.to_m4f(this.#_twist),	// q4f -> m4f
-			m4f.scale(this.#_scale),	// v4f -> m4f
-		);
-
-		if(this.#_dframe != null) {
-			this.#_dframe.set(this.#_matrix);
-			if(device != null && queue != null) {
-				this.#_dframe.bind(device, queue);
-			}
-		}
-		return this.#_matrix;
-	}
-
-	get_shift=(q=v4f.vec(0,0,0,1))=> v4f.copy(this.#_shift, q);
-	set_shift=(q=v4f.vec(0,0,0,1))=> v4f.copy(this.#_shift, q);
-
-	get_twist=(q=q4f.identity())=> q4f.copy(this.#_shift, q);
-	set_twist=(q=q4f.identity())=> q4f.copy(this.#_shift, q);
-
-	get_scale=(q=v4f.vec(1,1,1,1))=> q4f.copy(this.#_scale, q);
-	set_scale=(q=v4f.vec(1,1,1,1))=> q4f.copy(this.#_scale, q);
-
-	capture=(handle=(shift, twist, scale)=>{})=> {
-		handle(this.#_shift, this.#_twist, this.#_scale);
-		return this;
-	}
-}
-
 // storage device for all gltf_mesh models in a given context. This class is primarily where
 // mesh data will be accessed, loaded, and kept.
 export class scene_context {
 	#_mesh_registry; // what meshes are stored in this gltf file
 	#_image_registry; // what images are stored in this gltf file
 	#_texture_registry; // what textures are stored in gltf file (bitmap, sampler)
-
 /*
  * I'd like to refactor this implementation entirely. It seems like we have
  * the following acyclic dependency list for objects in the scene:
@@ -189,9 +225,9 @@ export class scene_context {
  * 		-> Implement the ability to select between sparse-length versus object-length encoding
  * 		for the attribute buffers in the vertex buffer.
  *
- * 		Basically, have a translation layer that takes the structure in which .gltf files
- * 		store vertex attribute information (sparse-length) and let the user control how it should
- * 		be uploaded to the GPU.
+ * 	Basically, have a translation layer that takes the structure in which .gltf files
+ * 	store vertex attribute information (sparse-length) and let the user control how it should
+ * 	be uploaded to the GPU.
  *
  * <-- WE ARE CURRENTLY HERE @ 10/30/23 -->
  * I want to refactor steps (1-4) with as much clarity as I can afford using a text-editor like Vim
