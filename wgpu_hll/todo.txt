@@ -1,0 +1,20 @@
+TODO:
+	work on tokenizing both structs and pure functions
+	
+	struct: -> {
+		members: [] (string)
+	}
+	
+// takes the contents of a function and writes it to a valid string that
+// compiles successfully.
+	assemble_struct:(struct_descriptor): {}
+
+	fn -> {
+		input: []
+		output: string
+		code: []
+	}
+
+// takes the contents of a function and writes it to a valid string that
+// compiles successfully.
+	assemble_fn:(fn_descriptor): {} -> string
